@@ -30,6 +30,7 @@ function useFotos(fotos: Foto[]) {
 
 const LEMAS = [
   'Hazlo por nosotros.',
+  'Por nosotros.',
   'Por esto vale la pena.',
   'Acuérdate de esto cuando quieras pedir domicilio.',
   'Un día menos para Grecia.',
@@ -76,7 +77,7 @@ export function Muro() {
     <div className="pila">
       <div className="cabecera">
         <div>
-          <h1>Hazlo por...</h1>
+          <h1>Por nosotros</h1>
           <p className="sub">El muro que nos recuerda para qué es todo esto.</p>
         </div>
       </div>
@@ -169,7 +170,7 @@ export function MuroMini({ ir }: { ir: (p: string) => void }) {
   return (
     <div className="tarjeta clic" onClick={() => ir('muro')}>
       <div className="fila entre mb">
-        <h3>Hazlo por...</h3>
+        <h3>Por nosotros</h3>
         <span className="chica suave">{estado.fotos.length === 0 ? 'Cuelga fotos ›' : 'Ver muro ›'}</span>
       </div>
       {fotos.length === 0 ? (

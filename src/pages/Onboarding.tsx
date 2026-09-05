@@ -4,8 +4,8 @@ import { Campo } from '../components/ui'
 
 export function Onboarding() {
   const { dispatch } = useStore()
-  const [a, setA] = useState('')
-  const [b, setB] = useState('')
+  const [a, setA] = useState('Juan José')
+  const [b, setB] = useState('Luisa')
   const [pareja, setPareja] = useState('')
   const [moneda, setMoneda] = useState('COP')
 

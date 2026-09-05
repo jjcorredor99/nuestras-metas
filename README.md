@@ -18,7 +18,7 @@ dispositivo (nada sale a internet).
   arrancar y un premio si lo cumplen.
 - **Hitos**: Grecia 2027 viene de fábrica (editable, no se borra). Pueden agregar más:
   la casa, el carro, el perro. Calcula cuánto hay que guardar al mes para llegar.
-- **Muro "Hazlo por..."**: fotos de ustedes, del destino, de lo que sea, estilo polaroid.
+- **Muro "Por nosotros"**: fotos de ustedes, del destino, de lo que sea, estilo polaroid.
   Al estilo del "Do it for her" de Homero pero con su propia gente.
 - **Ajustes**: nombres, moneda, exportar/cargar respaldo, empezar de cero.
 

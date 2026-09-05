@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { StoreProvider, useStore } from './store'
+import { SyncProvider } from './sync'
 import { Onboarding } from './pages/Onboarding'
 import { Inicio } from './pages/Inicio'
 import { Gastos } from './pages/Gastos'
@@ -77,7 +78,9 @@ function Shell() {
 export default function App() {
   return (
     <StoreProvider>
-      <Shell />
+      <SyncProvider>
+        <Shell />
+      </SyncProvider>
     </StoreProvider>
   )
 }

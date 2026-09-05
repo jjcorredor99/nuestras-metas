@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import { Campo } from '../components/ui'
+import { Cuenta } from '../components/Cuenta'
+import { useSync } from '../sync'
 
 export function Onboarding() {
   const { dispatch } = useStore()
@@ -8,8 +10,26 @@ export function Onboarding() {
   const [b, setB] = useState('Luisa')
   const [pareja, setPareja] = useState('')
   const [moneda, setMoneda] = useState('COP')
+  const [unirme, setUnirme] = useState(false)
+  const sync = useSync()
 
   const listo = a.trim() && b.trim()
+
+  if (unirme) {
+    return (
+      <div className="bienvenida">
+        <div className="corazon">🔗</div>
+        <h1 className="centrado">Unirme a nuestro hogar</h1>
+        <p className="centrado suave">
+          Entra con tu correo y escribe el código que te compartieron. Todo lo que ya está en el hogar aparece aquí.
+        </p>
+        <Cuenta soloUnirse />
+        <button className="btn fantasma" onClick={() => setUnirme(false)}>
+          Volver
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="bienvenida">
@@ -58,7 +78,16 @@ export function Onboarding() {
       >
         Empezar
       </button>
-      <p className="centrado mini suave">Todo se guarda en este dispositivo. Nada sale a internet.</p>
+      {sync.estadoSync !== 'sin-config' && (
+        <button className="btn fantasma" onClick={() => setUnirme(true)}>
+          La otra persona ya creó el hogar: unirme con código
+        </button>
+      )}
+      <p className="centrado mini suave">
+        {sync.estadoSync === 'sin-config'
+          ? 'Todo se guarda en este dispositivo. Nada sale a internet.'
+          : 'Los datos se guardan en el celular y, si quieren, se sincronizan entre los dos desde Ajustes.'}
+      </p>
     </div>
   )
 }

@@ -4,9 +4,11 @@ import { dinero, mesActual, nombreMes, diasParaVencer, diasHasta, pct, sumar } f
 import { Barra } from '../components/ui'
 import { catInfo } from '../categorias'
 import { MuroMini } from './Muro'
+import { useSync } from '../sync'
 
 export function Inicio({ ir }: { ir: (p: string) => void }) {
   const { estado } = useStore()
+  const sync = useSync()
   const { perfil, gastos, facturas, deudas, retos, metas } = estado
   const mes = mesActual()
 
@@ -54,9 +56,30 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
           <p className="sub">{saludo}</p>
           <h1>{perfil.nombrePareja}</h1>
         </div>
-        <button className="btn-icono" onClick={() => ir('ajustes')} aria-label="Ajustes" title="Ajustes">
-          ⚙️
-        </button>
+        <div className="fila" style={{ gap: 6 }}>
+          {sync.estadoSync !== 'sin-config' && (
+            <button
+              className="btn-icono"
+              onClick={() => ir('ajustes')}
+              aria-label="Sincronización"
+              title={
+                sync.estadoSync === 'listo'
+                  ? sync.error
+                    ? 'Problema al sincronizar'
+                    : sync.pendientes > 0
+                      ? 'Subiendo cambios'
+                      : 'Sincronizado con la otra persona'
+                  : 'Sin sincronizar. Toca para vincular.'
+              }
+              style={sync.estadoSync !== 'listo' ? { opacity: 0.55 } : undefined}
+            >
+              {sync.estadoSync !== 'listo' ? '☁️' : sync.error ? '⚠️' : sync.pendientes > 0 ? '⏳' : '☁️'}
+            </button>
+          )}
+          <button className="btn-icono" onClick={() => ir('ajustes')} aria-label="Ajustes" title="Ajustes">
+            ⚙️
+          </button>
+        </div>
       </div>
 
       {grecia && (

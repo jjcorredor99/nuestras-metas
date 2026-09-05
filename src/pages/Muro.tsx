@@ -9,6 +9,12 @@ import { Modal, Campo, useToast } from '../components/ui'
 function useFotos(fotos: Foto[]) {
   const [urls, setUrls] = useState<Record<string, string>>({})
   const ids = fotos.map((f) => f.id).join(',')
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const on = () => setTick((t) => t + 1)
+    window.addEventListener('fotos-actualizadas', on)
+    return () => window.removeEventListener('fotos-actualizadas', on)
+  }, [])
   useEffect(() => {
     let vivo = true
     listarFotos().then((blobs) => {
@@ -24,7 +30,7 @@ function useFotos(fotos: Foto[]) {
       vivo = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ids])
+  }, [ids, tick])
   return urls
 }
 

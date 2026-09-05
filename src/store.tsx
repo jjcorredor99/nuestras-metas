@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from 'react'
 import type { Estado, Gasto, Factura, Deuda, Reto, Meta, Foto, Perfil, Abono, AporteMeta } from './types'
 import { hoy, uid } from './format'
+import type { Fila } from './supabase'
 
 const CLAVE = 'nuestras-metas:v1'
 
@@ -87,6 +88,7 @@ export type Accion =
   | { tipo: 'foto/borrar'; id: string }
   | { tipo: 'importar'; estado: Estado }
   | { tipo: 'reiniciar' }
+  | { tipo: 'sync/aplicar'; filas: Fila[] }
 
 function reducer(s: Estado, a: Accion): Estado {
   switch (a.tipo) {
@@ -215,7 +217,61 @@ function reducer(s: Estado, a: Accion): Estado {
       return { ...estadoInicial(), ...a.estado }
     case 'reiniciar':
       return estadoInicial()
+
+    case 'sync/aplicar':
+      return aplicarFilas(s, a.filas)
   }
+}
+
+/** Coleccion del estado que corresponde a cada tipo de fila remota. */
+const COLECCION: Record<Exclude<Fila['tipo'], 'perfil'>, keyof Omit<Estado, 'version' | 'perfil'>> = {
+  gasto: 'gastos',
+  factura: 'facturas',
+  deuda: 'deudas',
+  reto: 'retos',
+  meta: 'metas',
+  foto: 'fotos',
+}
+
+function aplicarFilas(s: Estado, filas: Fila[]): Estado {
+  let n: Estado = { ...s }
+  for (const f of filas) {
+    if (f.tipo === 'perfil') {
+      if (!f.borrado) n = { ...n, perfil: { ...n.perfil, ...(f.data as Partial<Perfil>), onboarded: true } }
+      continue
+    }
+    const clave = COLECCION[f.tipo]
+    if (!clave) continue
+    const lista = n[clave] as { id: string }[]
+    if (f.borrado) {
+      // Grecia nunca se borra, ni desde el otro celular.
+      if (f.id === GRECIA_ID) continue
+      n = { ...n, [clave]: lista.filter((x) => x.id !== f.id) }
+    } else {
+      const dato = f.data as { id: string }
+      const existe = lista.some((x) => x.id === f.id)
+      n = {
+        ...n,
+        [clave]: existe ? lista.map((x) => (x.id === f.id ? dato : x)) : [dato, ...lista],
+      }
+    }
+  }
+  return n
+}
+
+/** Convierte el estado en filas remotas (sin hogar_id ni fechas; eso lo pone el sync). */
+export function filasDeEstado(e: Estado): { id: string; tipo: Fila['tipo']; data: unknown }[] {
+  const { onboarded: _o, ...perfil } = e.perfil
+  void _o
+  return [
+    { id: 'perfil', tipo: 'perfil', data: perfil },
+    ...e.gastos.map((x) => ({ id: x.id, tipo: 'gasto' as const, data: x })),
+    ...e.facturas.map((x) => ({ id: x.id, tipo: 'factura' as const, data: x })),
+    ...e.deudas.map((x) => ({ id: x.id, tipo: 'deuda' as const, data: x })),
+    ...e.retos.map((x) => ({ id: x.id, tipo: 'reto' as const, data: x })),
+    ...e.metas.map((x) => ({ id: x.id, tipo: 'meta' as const, data: x })),
+    ...e.fotos.map((x) => ({ id: x.id, tipo: 'foto' as const, data: x })),
+  ]
 }
 
 interface Ctx {

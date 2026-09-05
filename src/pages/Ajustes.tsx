@@ -3,6 +3,8 @@ import { useStore } from '../store'
 import type { Estado } from '../types'
 import { listarFotos, blobADataUrl, dataUrlABlob, guardarFoto } from '../db'
 import { Campo, useToast } from '../components/ui'
+import { Cuenta } from '../components/Cuenta'
+import { useSync } from '../sync'
 
 export function Ajustes() {
   const { estado, dispatch } = useStore()
@@ -13,6 +15,7 @@ export function Ajustes() {
   const [moneda, setMoneda] = useState(perfil.moneda)
   const inputRef = useRef<HTMLInputElement>(null)
   const { mostrar, Toast } = useToast()
+  const sync = useSync()
 
   const guardarPerfil = () => {
     dispatch({ tipo: 'perfil', perfil: { nombreA: nombreA.trim(), nombreB: nombreB.trim(), nombrePareja: nombrePareja.trim(), moneda } })
@@ -88,6 +91,14 @@ export function Ajustes() {
       </div>
 
       <div className="tarjeta pila">
+        <h3>Sincronizar entre los dos</h3>
+        <p className="chica suave">
+          Con una cuenta cada uno y un código compartido, lo que anote uno le aparece al otro en segundos. Fotos incluidas.
+        </p>
+        <Cuenta />
+      </div>
+
+      <div className="tarjeta pila">
         <h3>Respaldo</h3>
         <p className="chica suave">
           Todo vive en este dispositivo. Para tenerlo en el celular de los dos, exporta aquí y carga el archivo
@@ -117,7 +128,11 @@ export function Ajustes() {
         <button
           className="btn peligro"
           onClick={() => {
-            if (window.confirm('¿Borrar TODO y empezar de cero? Las fotos del muro se quedan guardadas hasta que las quites.')) {
+            const aviso =
+              sync.estadoSync === 'listo'
+                ? '¿Borrar TODO y empezar de cero? Como están sincronizados, también se borra en el otro celular.'
+                : '¿Borrar TODO y empezar de cero? Las fotos del muro se quedan guardadas hasta que las quites.'
+            if (window.confirm(aviso)) {
               dispatch({ tipo: 'reiniciar' })
             }
           }}

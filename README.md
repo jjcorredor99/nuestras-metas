@@ -38,12 +38,34 @@ npm run dev
 Si el repo se llama distinto, cambia el `base` en `vite.config.ts` o exporta
 `VITE_BASE=/otro-nombre/` al construir.
 
-## Tenerlo en los dos celulares
+## Tenerlo en los dos celulares (sincronización)
 
-Los datos viven en cada dispositivo. Para que los dos vean lo mismo, uno exporta el respaldo
-desde Ajustes y el otro lo carga. Es manual pero funciona sin cuentas ni servidores. Si más
-adelante quieren sincronización automática, el estado está centralizado en `src/store.tsx` y
-es el único punto que habría que conectar a algo como Supabase o Firebase.
+La app funciona sola en cada celular, y con Supabase se sincroniza entre los dos en tiempo
+real, fotos incluidas. Sigue funcionando sin internet y sube los cambios cuando vuelve.
+
+Configuración, una sola vez:
+
+1. Crea un proyecto gratis en [supabase.com](https://supabase.com).
+2. SQL Editor → New query → pega el contenido de `supabase/schema.sql` → Run.
+3. Authentication → Sign In / Providers → Email → desactiva **Confirm email** (son solo
+   ustedes dos; así entran sin esperar el correo de confirmación).
+4. Project Settings → API → copia la **Project URL** y la clave **publishable** en `.env`
+   (las que están son las del proyecto original; son públicas por diseño, la seguridad la
+   ponen las políticas RLS del esquema).
+
+Uso:
+
+1. El primero crea su cuenta en Ajustes → "Sincronizar entre los dos" → "Crear nuestro hogar".
+   Le sale un código de 6 letras. Todo lo que ya tenía se sube.
+2. La otra persona instala la app, y en la bienvenida toca "unirme con código", crea su
+   cuenta y escribe el código. Listo: los dos ven lo mismo.
+
+Sin `.env` la app corre igual, solo en local, y en Ajustes queda el respaldo manual.
+
+Cómo funciona: cada gasto, factura, deuda, reto, meta, foto y el perfil es una fila en la
+tabla `items` del hogar. `src/sync.tsx` compara el estado local con lo que ya está arriba y
+sube solo lo que cambió; escucha en tiempo real los cambios del otro celular y los aplica.
+Si dos personas editan lo mismo, gana el último cambio.
 
 ## Estructura
 

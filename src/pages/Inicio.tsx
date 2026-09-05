@@ -1,0 +1,184 @@
+import { useMemo } from 'react'
+import { useStore, saldoDeuda, ahorradoMeta, GRECIA_ID } from '../store'
+import { dinero, mesActual, nombreMes, diasParaVencer, diasHasta, pct, sumar } from '../format'
+import { Barra } from '../components/ui'
+import { catInfo } from '../categorias'
+import { MuroMini } from './Muro'
+
+export function Inicio({ ir }: { ir: (p: string) => void }) {
+  const { estado } = useStore()
+  const { perfil, gastos, facturas, deudas, retos, metas } = estado
+  const mes = mesActual()
+
+  const gastosMes = useMemo(() => gastos.filter((g) => g.fecha.startsWith(mes)), [gastos, mes])
+  const totalMes = sumar(gastosMes.map((g) => g.monto))
+  const porPersona = {
+    a: sumar(gastosMes.filter((g) => g.pagadoPor === 'a').map((g) => g.monto)),
+    b: sumar(gastosMes.filter((g) => g.pagadoPor === 'b').map((g) => g.monto)),
+  }
+
+  const pendientes = facturas
+    .filter((f) => f.activa && !f.pagadaEn.includes(mes))
+    .map((f) => ({ ...f, dias: diasParaVencer(f.diaVence) }))
+    .sort((x, y) => x.dias - y.dias)
+    .slice(0, 3)
+
+  const deudaInicial = sumar(deudas.map((d) => d.montoInicial))
+  const deudaActual = sumar(deudas.map(saldoDeuda))
+  const deudaPagadaPct = pct(deudaInicial - deudaActual, deudaInicial)
+
+  const retosActivos = retos.filter((r) => !r.completado)
+  const retosHechos = retos.filter((r) => r.completado).length
+
+  const grecia = metas.find((m) => m.id === GRECIA_ID)
+  const greciaAhorro = grecia ? ahorradoMeta(grecia) : 0
+  const greciaDias = grecia ? diasHasta(grecia.fecha) : 0
+
+  const saludo = (() => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Buenos días'
+    if (h < 19) return 'Buenas tardes'
+    return 'Buenas noches'
+  })()
+
+  const topCats = useMemo(() => {
+    const m = new Map<string, number>()
+    gastosMes.forEach((g) => m.set(g.categoria, (m.get(g.categoria) ?? 0) + g.monto))
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+  }, [gastosMes])
+
+  return (
+    <div className="pila">
+      <div className="cabecera">
+        <div>
+          <p className="sub">{saludo}</p>
+          <h1>{perfil.nombrePareja}</h1>
+        </div>
+        <button className="btn-icono" onClick={() => ir('ajustes')} aria-label="Ajustes" title="Ajustes">
+          ⚙️
+        </button>
+      </div>
+
+      {grecia && (
+        <div className="tarjeta egeo clic" onClick={() => ir('metas')}>
+          <div className="fila entre">
+            <span className="etiqueta">Hito · {grecia.emoji} Grecia 2027</span>
+            <span className="chip" style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>
+              {greciaDias > 0 ? `faltan ${greciaDias} días` : '¡Es hoy!'}
+            </span>
+          </div>
+          <div className="cifra grande" style={{ marginTop: 8 }}>
+            {dinero(greciaAhorro, perfil.moneda)}
+          </div>
+          <p className="chica" style={{ opacity: 0.85, marginBottom: 10 }}>
+            de {dinero(grecia.montoObjetivo, perfil.moneda)} · {pct(greciaAhorro, grecia.montoObjetivo)}%
+          </p>
+          <Barra valor={pct(greciaAhorro, grecia.montoObjetivo)} color="blanca" />
+        </div>
+      )}
+
+      <div className="grid2">
+        <div className="tarjeta clic" onClick={() => ir('gastos')}>
+          <span className="etiqueta">Gastos · {nombreMes(mes).split(' ')[0]}</span>
+          <div className="cifra">{dinero(totalMes, perfil.moneda)}</div>
+          <p className="mini suave" style={{ marginTop: 6 }}>
+            {perfil.nombreA}: {dinero(porPersona.a, perfil.moneda)}
+            <br />
+            {perfil.nombreB}: {dinero(porPersona.b, perfil.moneda)}
+          </p>
+        </div>
+        <div className="tarjeta clic" onClick={() => ir('deudas')}>
+          <span className="etiqueta">Deuda que falta</span>
+          <div className="cifra">{dinero(deudaActual, perfil.moneda)}</div>
+          <div style={{ marginTop: 8 }}>
+            <Barra valor={deudaPagadaPct} color="oliva" />
+            <p className="mini suave" style={{ marginTop: 4 }}>
+              {deudaInicial > 0 ? `${deudaPagadaPct}% tumbada` : 'Sin deudas registradas'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="tarjeta">
+        <div className="fila entre mb">
+          <h3>Facturas que vienen</h3>
+          <button className="btn chico fantasma" onClick={() => ir('facturas')}>
+            Ver todas
+          </button>
+        </div>
+        {pendientes.length === 0 ? (
+          <p className="suave chica">
+            {facturas.length === 0 ? 'Todavía no hay facturas. Agrégalas para no olvidarlas.' : 'Todo pago este mes. 🙌'}
+          </p>
+        ) : (
+          pendientes.map((f) => (
+            <div className="item" key={f.id}>
+              <div className="icono">{f.dias <= 2 ? '🔥' : f.dias <= 7 ? '⏰' : '📄'}</div>
+              <div className="cuerpo">
+                <div className="titulo">{f.nombre}</div>
+                <div className="chica suave">
+                  {f.dias < 0
+                    ? `vencida hace ${-f.dias} días`
+                    : f.dias === 0
+                      ? 'vence hoy'
+                      : f.dias === 1
+                        ? 'vence mañana'
+                        : `vence en ${f.dias} días`}
+                </div>
+              </div>
+              <div className="monto">{dinero(f.monto, perfil.moneda)}</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="tarjeta oliva clic" onClick={() => ir('retos')}>
+        <div className="fila entre">
+          <h3>Retos</h3>
+          <span className="chip oliva">{retosHechos} cumplidos</span>
+        </div>
+        {retosActivos.length === 0 ? (
+          <p className="chica suave mt">Sin retos activos. Toca para proponer uno.</p>
+        ) : (
+          retosActivos.slice(0, 2).map((r) => (
+            <div key={r.id} className="mt">
+              <div className="fila entre chica">
+                <span className="negrita">
+                  {r.emoji} {r.titulo}
+                </span>
+                <span className="suave">{pct(r.progreso, r.meta)}%</span>
+              </div>
+              <div style={{ marginTop: 4 }}>
+                <Barra valor={pct(r.progreso, r.meta)} color="oliva" />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {topCats.length > 0 && (
+        <div className="tarjeta">
+          <h3 className="mb">En qué se nos fue</h3>
+          {topCats.map(([c, v]) => {
+            const info = catInfo(c as never)
+            return (
+              <div className="cat-fila" key={c}>
+                <span>{info.emoji}</span>
+                <div>
+                  <div className="fila entre chica">
+                    <span>{info.nombre}</span>
+                    <span className="negrita">{dinero(v, perfil.moneda)}</span>
+                  </div>
+                  <Barra valor={pct(v, totalMes)} />
+                </div>
+                <span />
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <MuroMini ir={ir} />
+    </div>
+  )
+}

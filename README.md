@@ -31,9 +31,11 @@ npm run dev
 
 ## Publicar (GitHub Pages)
 
-1. En el repo: Settings → Pages → Source: **GitHub Actions**.
-2. Al hacer push a `main` se publica solo en `https://<usuario>.github.io/nuestras-metas/`.
-3. Abran esa URL en el celular y "Agregar a inicio" (Safari) o "Instalar app" (Chrome).
+1. Cada push a `main` construye la app y la publica en la rama `gh-pages`.
+2. Si el sitio no aparece solo: Settings → Pages → Source: **Deploy from a branch** → rama
+   `gh-pages`, carpeta `/ (root)` → Save.
+3. La app queda en `https://<usuario>.github.io/nuestras-metas/`. Ábranla en el celular y
+   "Agregar a inicio" (Safari) o "Instalar app" (Chrome).
 
 Si el repo se llama distinto, cambia el `base` en `vite.config.ts` o exporta
 `VITE_BASE=/otro-nombre/` al construir.

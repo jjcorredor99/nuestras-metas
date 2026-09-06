@@ -9,7 +9,8 @@ dispositivo (nada sale a internet).
 - **Inicio**: resumen del mes, Grecia 2027 con cuenta regresiva, facturas que vienen, retos y
   el muro de fotos.
 - **Gastos**: quién pagó, si es compartido o personal, categoría, y el balance del mes
-  (quién le debe a quién por lo compartido).
+  (quién le debe a quién por lo compartido). Los SMS del banco se anotan solos con un Atajo del
+  iPhone, o pegando el mensaje con el botón 📩.
 - **Facturas**: fijas con día de vencimiento. Se marcan pagadas cada mes y avisan cuando
   falten 3 días o menos (si activan las notificaciones).
 - **Deudas**: cada deuda con su saldo, abonos y progreso. Las ordena por método bola de nieve
@@ -69,6 +70,56 @@ tabla `items` del hogar. `src/sync.tsx` compara el estado local con lo que ya es
 sube solo lo que cambió; escucha en tiempo real los cambios del otro celular y los aplica.
 Si dos personas editan lo mismo, gana el último cambio.
 
+## Gastos desde los mensajes del banco
+
+Cuando llega el SMS ("Bancolombia: Compra por $45.900 en EXITO...") no hay que anotar nada a mano.
+
+**Lo que no se puede:** una app web no puede leer los SMS ni ponerle un botón a la app Mensajes.
+No existe esa API en iPhone ni en Android. Así que el mensaje no se lee: **se manda** a la app.
+
+Hay dos formas, y conviene tener las dos:
+
+### 1. Automático, con un Atajo del iPhone (para los SMS)
+
+Una vez, en Supabase: SQL Editor → New query → pega `supabase/mensajes.sql` → Run.
+
+Después, en Ajustes → **Anotar desde mensajes** → "Generar mi token". Ahí quedan los tres datos
+que pide el Atajo (enlace, clave y token), con botones para copiarlos.
+
+En el iPhone, una sola vez por banco y por celular:
+
+1. **Atajos** → pestaña **Automatización** → **+** → **Mensaje**.
+2. Remitente: `Bancolombia` (o "Mensaje contiene" con el nombre del banco) → **Ejecutar inmediatamente**.
+3. Acción **Obtener contenido de URL**, con el **enlace** copiado.
+4. Método **POST**. Encabezados: `apikey` = la **clave**, `Content-Type` = `application/json`.
+5. Cuerpo **JSON** con dos campos de texto: `p_token` = tu **token**, y `p_texto` = la variable
+   **Contenido del mensaje**.
+
+Desde ahí el SMS viaja solo. Al abrir la app: lo que se entiende completo ya está anotado, y lo
+dudoso espera en **"por confirmar"** con un botón para guardarlo.
+
+Solo funciona con mensajes que lleguen a la app **Mensajes**. Las alertas que llegan como
+notificación de la app del banco (RappiCard, Falabella, Lulo) no las ve ningún Atajo.
+
+### 2. Pegando el mensaje (sirve para todo)
+
+En Gastos, el botón **📩**: "Pegar mensaje" y el gasto sale lleno. Es el respaldo para las alertas
+que llegan por notificación y para cuando el Atajo no alcanzó.
+
+### Qué entiende y qué aprende
+
+Lee monto, comercio, fecha, tipo de movimiento y los últimos 4 de la tarjeta de Bancolombia,
+RappiCard, Falabella/CMR, Lulo, Nequi y Daviplata, y de paso de cualquier banco con formato
+parecido. Descarta claves dinámicas, códigos y publicidad, y no anota la plata que entra.
+
+La categoría la propone `src/comercios.ts`. Si la corrigen al guardar, se acuerda de ese comercio
+para la próxima (y eso se sincroniza entre los dos). El mismo mensaje no se anota dos veces:
+cada gasto guarda la huella del SMS del que salió.
+
+Las reglas del lector viven en `src/mensajes.ts` y están cubiertas con pruebas: `npm test`.
+Si un banco les manda un formato que no entiende, agreguen el mensaje al archivo de pruebas
+y ajusten el patrón.
+
 ## Estructura
 
 ```
@@ -78,6 +129,10 @@ src/
   db.ts           fotos en IndexedDB
   format.ts       dinero, fechas, porcentajes
   categorias.ts   categorías de gasto
+  mensajes.ts     lee el SMS del banco y saca el gasto (con pruebas)
+  comercios.ts    comercio -> categoría, y lo que ustedes le enseñan
+  entrantes.tsx   bandeja de mensajes que mandó el Atajo del celular
+  enlace.ts       mensajes que llegan por la URL (#gastos?texto=...)
   components/ui   modal, campos, barras, confeti, toast
   pages/          Inicio, Gastos, Facturas, Deudas, Retos, Metas, Muro, Ajustes
 ```

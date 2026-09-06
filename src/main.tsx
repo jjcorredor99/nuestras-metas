@@ -1,7 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { capturarMensajeDelEnlace } from './enlace'
 import './styles.css'
+
+// Antes de pintar: si el enlace trae un mensaje del banco, lo guardamos.
+capturarMensajeDelEnlace()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

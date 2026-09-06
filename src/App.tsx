@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { StoreProvider, useStore } from './store'
 import { SyncProvider } from './sync'
+import { EntrantesProvider } from './entrantes'
+import { capturarMensajeDelEnlace } from './enlace'
 import { Onboarding } from './pages/Onboarding'
 import { Inicio } from './pages/Inicio'
 import { Gastos } from './pages/Gastos'
@@ -25,7 +27,8 @@ const PAGINAS = [
 type Pagina = (typeof PAGINAS)[number]['id']
 
 const desdeHash = (): Pagina => {
-  const h = location.hash.replace('#', '') as Pagina
+  // El hash puede traer parámetros (#gastos?texto=...): la página es lo de antes del "?".
+  const h = location.hash.replace('#', '').split('?')[0] as Pagina
   return PAGINAS.some((p) => p.id === h) ? h : 'inicio'
 }
 
@@ -34,7 +37,11 @@ function Shell() {
   const [pagina, setPagina] = useState<Pagina>(desdeHash)
 
   useEffect(() => {
-    const onHash = () => setPagina(desdeHash())
+    // Si el enlace nuevo trae un mensaje del banco, se guarda y el hash queda limpio.
+    const onHash = () => {
+      capturarMensajeDelEnlace()
+      setPagina(desdeHash())
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -79,7 +86,9 @@ export default function App() {
   return (
     <StoreProvider>
       <SyncProvider>
-        <Shell />
+        <EntrantesProvider>
+          <Shell />
+        </EntrantesProvider>
       </SyncProvider>
     </StoreProvider>
   )

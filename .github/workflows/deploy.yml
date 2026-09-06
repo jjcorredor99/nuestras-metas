@@ -22,6 +22,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm test
       - run: npm run build
       # Publica dist/ en la rama gh-pages. GitHub la detecta y sirve el sitio.
       - uses: peaceiris/actions-gh-pages@v4

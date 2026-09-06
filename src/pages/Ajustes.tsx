@@ -4,6 +4,7 @@ import type { Estado } from '../types'
 import { listarFotos, blobADataUrl, dataUrlABlob, guardarFoto } from '../db'
 import { Campo, useToast } from '../components/ui'
 import { Cuenta } from '../components/Cuenta'
+import { AtajoSms } from '../components/AtajoSms'
 import { useSync } from '../sync'
 
 export function Ajustes() {
@@ -96,6 +97,11 @@ export function Ajustes() {
           Con una cuenta cada uno y un código compartido, lo que anote uno le aparece al otro en segundos. Fotos incluidas.
         </p>
         <Cuenta />
+      </div>
+
+      <div className="tarjeta pila">
+        <h3>Anotar desde mensajes</h3>
+        <AtajoSms avisar={mostrar} />
       </div>
 
       <div className="tarjeta pila">

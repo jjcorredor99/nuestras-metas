@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from 'react'
-import type { Estado, Gasto, Factura, Deuda, Reto, Meta, Foto, Perfil, Abono, AporteMeta } from './types'
+import type { Estado, Gasto, Factura, Deuda, Reto, Meta, Foto, Perfil, Abono, AporteMeta, Categoria } from './types'
+import { claveComercio } from './comercios'
 import { hoy, uid } from './format'
 import type { Fila } from './supabase'
 
@@ -61,6 +62,7 @@ function cargar(): Estado {
 
 export type Accion =
   | { tipo: 'perfil'; perfil: Partial<Perfil> }
+  | { tipo: 'perfil/aprender-comercio'; comercio: string; categoria: Categoria }
   | { tipo: 'gasto/agregar'; gasto: Omit<Gasto, 'id'> }
   | { tipo: 'gasto/editar'; gasto: Gasto }
   | { tipo: 'gasto/borrar'; id: string }
@@ -94,6 +96,11 @@ function reducer(s: Estado, a: Accion): Estado {
   switch (a.tipo) {
     case 'perfil':
       return { ...s, perfil: { ...s.perfil, ...a.perfil } }
+    case 'perfil/aprender-comercio': {
+      const clave = claveComercio(a.comercio)
+      if (!clave) return s
+      return { ...s, perfil: { ...s.perfil, aprendidos: { ...s.perfil.aprendidos, [clave]: a.categoria } } }
+    }
 
     case 'gasto/agregar':
       return { ...s, gastos: [{ ...a.gasto, id: uid() }, ...s.gastos] }

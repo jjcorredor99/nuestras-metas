@@ -3,6 +3,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined
 
+/** Datos que necesita el Atajo del celular para mandar los mensajes (son públicos por diseño). */
+export const supabaseUrl = url ?? ''
+export const supabaseKey = key ?? ''
+
 /** null cuando no hay configuración: la app funciona solo en local. */
 export const supabase: SupabaseClient | null =
   url && key ? createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } }) : null
@@ -25,4 +29,14 @@ export interface Fila {
   borrado: boolean
   actualizado_en: string
   actualizado_por?: string | null
+}
+
+/** Un mensaje del banco tal como lo dejó el Atajo del celular. */
+export interface FilaEntrante {
+  id: string
+  hogar_id: string
+  persona: 'a' | 'b'
+  texto: string
+  recibido_en: string
+  procesado: boolean
 }

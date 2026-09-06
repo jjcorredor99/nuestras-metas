@@ -46,10 +46,11 @@ begin
   select * into t from public.tokens_sms where token = p_token;
   if t.token is null then raise exception 'Token inválido'; end if;
 
-  -- si el Atajo se dispara dos veces, no lo guardamos dos veces
+  -- Un mismo texto no se guarda dos veces. La ventana cubre toda la retención,
+  -- para que reenviar mensajes viejos desde el Atajo no duplique gastos.
   if exists (
     select 1 from public.entrantes e
-    where e.hogar_id = t.hogar_id and e.texto = msg and e.recibido_en > now() - interval '10 minutes'
+    where e.hogar_id = t.hogar_id and e.texto = msg and e.recibido_en > now() - interval '30 days'
   ) then
     return;
   end if;

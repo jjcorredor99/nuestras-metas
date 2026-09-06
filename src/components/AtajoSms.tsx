@@ -78,6 +78,11 @@ export function AtajoSms({ avisar }: { avisar: (m: string) => void }) {
         Un Atajo del iPhone puede mandar solo cada SMS del banco. La app lo lee al abrirla: lo que se
         entiende completo queda anotado, y lo dudoso te espera en "por confirmar".
       </p>
+      <p className="chica suave">
+        Sirve de dos formas: como automatización, que dispara con cada mensaje que llega, o como un
+        Atajo que corres cuando quieras y recoge los del día. Mandar el mismo mensaje dos veces no
+        duplica nada.
+      </p>
 
       {!listo && (
         <p className="chica">Primero vinculen los dos celulares aquí arriba, en "Sincronizar entre los dos".</p>
@@ -144,6 +149,11 @@ export function AtajoSms({ avisar }: { avisar: (m: string) => void }) {
               <li>
                 En Cuerpo de la solicitud elige <b>JSON</b> y crea dos campos de texto: <b>p_token</b> con tu{' '}
                 <b>token</b>, y <b>p_texto</b> con la variable <b>Contenido del mensaje</b>.
+              </li>
+              <li>
+                Opcional pero recomendado: agrega un tercer campo <b>p_id</b> con el{' '}
+                <b>identificador</b> del mensaje. Con eso no se repite nunca un gasto, aunque vuelvas a
+                mandar mensajes viejos. Sin él, la app usa el texto para no duplicar.
               </li>
               <li>Listo. Repite el Atajo por cada banco que les escriba, y en el celular de cada uno.</li>
             </ol>

@@ -23,6 +23,12 @@ create table if not exists public.entrantes (
 );
 create index if not exists entrantes_pendientes on public.entrantes (hogar_id, procesado, recibido_en);
 
+-- Identificador del mensaje en el celular (el UUID que da Atajos). Es opcional:
+-- si viene, deduplica exacto; si no, se cae al texto.
+alter table public.entrantes add column if not exists externo_id text;
+create unique index if not exists entrantes_externo on public.entrantes (hogar_id, externo_id)
+  where externo_id is not null;
+
 alter table public.tokens_sms enable row level security;
 alter table public.entrantes enable row level security;
 
@@ -36,32 +42,41 @@ create policy "entrantes del hogar" on public.entrantes
   for all using (public.es_miembro(hogar_id)) with check (public.es_miembro(hogar_id));
 
 -- ---------- lo único que toca el Atajo: guarda el texto, no lee nada ----------
-create or replace function public.entrada_sms(p_token text, p_texto text) returns void
+-- p_id es opcional: manda el identificador del mensaje y la deduplicación es exacta.
+create or replace function public.entrada_sms(p_token text, p_texto text, p_id text default null)
+  returns void
 language plpgsql security definer set search_path = public as $$
 declare
   t public.tokens_sms;
   msg text := left(trim(coalesce(p_texto, '')), 600);
+  ext text := nullif(trim(coalesce(p_id, '')), '');
 begin
   if char_length(msg) < 8 then raise exception 'Mensaje vacío'; end if;
   select * into t from public.tokens_sms where token = p_token;
   if t.token is null then raise exception 'Token inválido'; end if;
 
-  -- Un mismo texto no se guarda dos veces. La ventana cubre toda la retención,
+  -- Sin identificador, el texto hace de llave. La ventana cubre toda la retención,
   -- para que reenviar mensajes viejos desde el Atajo no duplique gastos.
-  if exists (
+  if ext is null and exists (
     select 1 from public.entrantes e
     where e.hogar_id = t.hogar_id and e.texto = msg and e.recibido_en > now() - interval '30 days'
   ) then
     return;
   end if;
 
-  insert into public.entrantes (hogar_id, persona, texto) values (t.hogar_id, t.persona, msg);
+  -- Con identificador, el índice único se encarga: repetirlo no hace nada.
+  insert into public.entrantes (hogar_id, persona, texto, externo_id)
+    values (t.hogar_id, t.persona, msg, ext)
+    on conflict (hogar_id, externo_id) where externo_id is not null do nothing;
+
   delete from public.entrantes
     where hogar_id = t.hogar_id and procesado and recibido_en < now() - interval '30 days';
 end $$;
 
-revoke all on function public.entrada_sms(text, text) from public;
-grant execute on function public.entrada_sms(text, text) to anon, authenticated;
+-- La versión vieja de dos parámetros estorba: PostgREST no sabría cuál llamar.
+drop function if exists public.entrada_sms(text, text);
+revoke all on function public.entrada_sms(text, text, text) from public;
+grant execute on function public.entrada_sms(text, text, text) to anon, authenticated;
 
 -- ---------- generar mi token desde Ajustes ----------
 create or replace function public.crear_token_sms(p_persona text) returns text

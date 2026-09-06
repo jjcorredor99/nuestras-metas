@@ -6,6 +6,8 @@ export interface Perfil {
   nombrePareja: string
   moneda: string
   onboarded: boolean
+  /** Comercios cuya categoría corrigieron a mano, para acertar la próxima vez. */
+  aprendidos?: Record<string, Categoria>
 }
 
 export type Categoria =
@@ -21,6 +23,14 @@ export type Categoria =
   | 'viajes'
   | 'otros'
 
+/** De dónde salió un gasto que no se escribió a mano. */
+export interface OrigenGasto {
+  fuente: 'sms' | 'pegado'
+  /** Huella del mensaje, para no anotarlo dos veces. */
+  hash: string
+  banco?: string
+}
+
 export interface Gasto {
   id: string
   fecha: string // YYYY-MM-DD
@@ -29,6 +39,7 @@ export interface Gasto {
   pagadoPor: Persona
   compartido: boolean
   nota: string
+  origen?: OrigenGasto
 }
 
 export interface Factura {

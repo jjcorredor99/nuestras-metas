@@ -5,10 +5,12 @@ import { Barra } from '../components/ui'
 import { catInfo } from '../categorias'
 import { MuroMini } from './Muro'
 import { useSync } from '../sync'
+import { useEntrantes } from '../entrantes'
 
 export function Inicio({ ir }: { ir: (p: string) => void }) {
   const { estado } = useStore()
   const sync = useSync()
+  const { pendientes: porConfirmar } = useEntrantes()
   const { perfil, gastos, facturas, deudas, retos, metas } = estado
   const mes = mesActual()
 
@@ -81,6 +83,18 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
           </button>
         </div>
       </div>
+
+      {porConfirmar.length > 0 && (
+        <div className="tarjeta clic" onClick={() => ir('gastos')}>
+          <div className="fila entre">
+            <span className="titulo">
+              📩 {porConfirmar.length === 1 ? 'Un gasto por confirmar' : `${porConfirmar.length} gastos por confirmar`}
+            </span>
+            <span className="chica suave">Revisar →</span>
+          </div>
+          <p className="mini suave" style={{ marginTop: 4 }}>Llegaron por mensaje del banco.</p>
+        </div>
+      )}
 
       {grecia && (
         <div className="tarjeta egeo clic" onClick={() => ir('metas')}>

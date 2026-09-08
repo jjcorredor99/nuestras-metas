@@ -127,7 +127,7 @@ export function Gastos() {
     if (p.lectura) return abrirLectura(p.lectura, p.persona, 'sms', p.id)
     setEntranteId(p.id)
     setSugerida(null)
-    setEditando({ ...nuevo(), pagadoPor: p.persona, nota: p.texto.slice(0, 60) })
+    setEditando({ ...nuevo(), pagadoPor: p.persona, compartido: false, nota: p.texto.slice(0, 60) })
   }
 
   return (

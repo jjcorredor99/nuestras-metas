@@ -1,8 +1,8 @@
-import type { Categoria, Gasto, OrigenGasto, Persona } from './types'
+import type { Categoria, FuenteIngreso, Gasto, Ingreso, OrigenGasto, Persona } from './types'
 import { hoy } from './format'
 import { categoriaDe } from './comercios'
 
-export type TipoMovimiento = 'compra' | 'pago' | 'retiro' | 'transferencia'
+export type TipoMovimiento = 'compra' | 'pago' | 'retiro' | 'transferencia' | 'ingreso'
 export type MotivoRechazo = 'sin-monto' | 'no-es-gasto' | 'es-ingreso'
 
 export interface Lectura {
@@ -16,6 +16,8 @@ export interface Lectura {
   /** 'alta' = se anota solo; 'baja' = pasa por la bandeja "por confirmar". */
   confianza: 'alta' | 'baja'
   hash: string
+  /** Solo cuando tipo === 'ingreso': de dónde parece venir la plata. */
+  fuenteIngreso?: FuenteIngreso
 }
 
 export interface Rechazo {
@@ -24,10 +26,13 @@ export interface Rechazo {
 
 export const esLectura = (r: Lectura | Rechazo): r is Lectura => !('error' in r)
 
+/** Plata que entró: nunca se anota sola, siempre pasa por "por confirmar". */
+export const esIngreso = (l: Lectura): boolean => l.tipo === 'ingreso'
+
 export const MOTIVOS: Record<MotivoRechazo, string> = {
   'sin-monto': 'No encontré un valor en el mensaje.',
   'no-es-gasto': 'Ese mensaje no parece un gasto.',
-  'es-ingreso': 'Eso es plata que entró, no un gasto.',
+  'es-ingreso': 'Parece plata que entró, pero no encontré el valor.',
 }
 
 /** Mayúsculas, sin tildes y con los espacios parejos. Todo lo demás trabaja sobre esto. */
@@ -140,6 +145,19 @@ function comercioDe(t: string, desde: number): string {
     .slice(0, 40)
 }
 
+/** Quién mandó la plata: lo que sigue a "de", "desde" o "por concepto de". */
+function remitenteDe(t: string, desde: number): string {
+  let resto = t.slice(desde)
+  const conector = resto.match(/^\s*(?:POR CONCEPTO DE|POR PARTE DE|DESDE|DE)\s+/)
+  resto = conector ? resto.slice(conector[0].length) : resto.replace(/^\s+/, '')
+  const corte = resto.search(/\sA TU\b|\sEN TU\b|\sA LA\b/)
+  const acotado = corte >= 0 ? resto.slice(0, corte) : resto
+  return comercioDe(acotado, 0)
+}
+
+const fuenteIngresoDe = (t: string): FuenteIngreso =>
+  /NOMINA|SALARIO|SUELDO|QUINCENA/.test(t) ? 'nomina' : /DEVOLUCION|REVERSION|REEMBOLSO/.test(t) ? 'devolucion' : 'otro'
+
 const iso = (a: number, m: number, d: number): string =>
   `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
@@ -186,8 +204,25 @@ export function leerMensaje(
   if (RE_NO_TX.test(t)) return { error: 'no-es-gasto' }
 
   const verbo = VERBOS.find((v) => v.re.test(t))
+  const banco = BANCOS.find(([re]) => re.test(t))?.[1] ?? 'Desconocido'
+
+  // Plata que entra. Una compra o un retiro ganan aunque el texto mencione "devolución" o "abono".
   if (RE_INGRESO.test(t) && (!verbo || verbo.tipo === 'pago' || verbo.tipo === 'transferencia')) {
-    return { error: 'es-ingreso' }
+    const importes = importesEn(t)
+    if (!importes.length) return { error: 'es-ingreso' }
+    const desde = t.search(RE_INGRESO)
+    const importe = importes.find((i) => i.desde >= desde) ?? importes[0]
+    return {
+      monto: importe.valor,
+      comercio: remitenteDe(t, importe.hasta),
+      fecha: fechaDe(t),
+      banco,
+      tipo: 'ingreso',
+      categoria: 'otros',
+      confianza: 'baja',
+      hash: huella(texto),
+      fuenteIngreso: fuenteIngresoDe(t),
+    }
   }
   if (!verbo) return { error: 'no-es-gasto' }
 
@@ -196,7 +231,6 @@ export function leerMensaje(
   const desdeVerbo = t.search(verbo.re)
   const importe = importes.find((i) => i.desde >= desdeVerbo) ?? importes[0]
 
-  const banco = BANCOS.find(([re]) => re.test(t))?.[1] ?? 'Desconocido'
   const comercio = comercioDe(t, importe.hasta)
   const categoria = categoriaDe(comercio, aprendidos)
   const tarjeta = t.match(/\*\s?(\d{4})\b/)?.[1]
@@ -223,6 +257,7 @@ export function notaDe(l: Lectura): string {
     pago: 'Pago',
     retiro: 'Retiro',
     transferencia: 'Transferencia',
+    ingreso: 'Ingreso',
   }
   return `${como[l.tipo]} ${l.banco !== 'Desconocido' ? l.banco : ''}`.trim()
 }
@@ -245,6 +280,22 @@ export function borradorDesde(
     pagadoPor,
     compartido,
     nota: notaDe(l),
+    origen: { fuente, hash: l.hash, banco: l.banco },
+  }
+}
+
+/** Convierte una lectura de plata que entró en el ingreso listo para revisar. */
+export function borradorIngresoDesde(
+  l: Lectura,
+  de: Persona,
+  fuente: OrigenGasto['fuente'] = 'sms',
+): Omit<Ingreso, 'id'> {
+  return {
+    fecha: l.fecha,
+    monto: l.monto,
+    de,
+    fuente: l.fuenteIngreso ?? 'otro',
+    nota: l.comercio,
     origen: { fuente, hash: l.hash, banco: l.banco },
   }
 }

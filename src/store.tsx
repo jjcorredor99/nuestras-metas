@@ -1,6 +1,22 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from 'react'
-import type { Estado, Gasto, Factura, Deuda, Reto, Meta, Foto, Perfil, Abono, AporteMeta, Categoria } from './types'
+import type {
+  Estado,
+  Gasto,
+  Factura,
+  Deuda,
+  Reto,
+  Meta,
+  Foto,
+  Perfil,
+  Abono,
+  AporteMeta,
+  Categoria,
+  Bolsillo,
+  AjusteBolsillo,
+  Ingreso,
+} from './types'
 import { claveComercio } from './comercios'
+import { quitarCategorias } from './caja'
 import { hoy, uid } from './format'
 import type { Fila } from './supabase'
 
@@ -37,6 +53,8 @@ export function estadoInicial(): Estado {
       },
     ],
     fotos: [],
+    bolsillos: [],
+    ingresos: [],
   }
 }
 
@@ -88,6 +106,16 @@ export type Accion =
   | { tipo: 'foto/agregar'; foto: Foto }
   | { tipo: 'foto/editar'; foto: Foto }
   | { tipo: 'foto/borrar'; id: string }
+  | { tipo: 'bolsillo/agregar'; bolsillo: Omit<Bolsillo, 'id' | 'ajustes'> }
+  | { tipo: 'bolsillo/editar'; bolsillo: Bolsillo }
+  | { tipo: 'bolsillo/borrar'; id: string }
+  | { tipo: 'bolsillo/ajustar'; id: string; ajuste: Omit<AjusteBolsillo, 'id'> }
+  | { tipo: 'bolsillo/quitarAjuste'; id: string; ajusteId: string }
+  | { tipo: 'bolsillo/mover'; de: string; a: string; monto: number; fecha: string; nota: string }
+  | { tipo: 'bolsillo/crearVarios'; bolsillos: Omit<Bolsillo, 'id' | 'ajustes'>[] }
+  | { tipo: 'ingreso/agregar'; ingreso: Omit<Ingreso, 'id'> }
+  | { tipo: 'ingreso/editar'; ingreso: Ingreso }
+  | { tipo: 'ingreso/borrar'; id: string }
   | { tipo: 'importar'; estado: Estado }
   | { tipo: 'reiniciar' }
   | { tipo: 'sync/aplicar'; filas: Fila[] }
@@ -220,6 +248,75 @@ function reducer(s: Estado, a: Accion): Estado {
     case 'foto/borrar':
       return { ...s, fotos: s.fotos.filter((f) => f.id !== a.id) }
 
+    case 'bolsillo/agregar': {
+      const nuevo: Bolsillo = { ...a.bolsillo, id: uid(), ajustes: [] }
+      return { ...s, bolsillos: [...quitarCategorias(s.bolsillos, nuevo), nuevo] }
+    }
+    case 'bolsillo/editar':
+      return {
+        ...s,
+        bolsillos: quitarCategorias(s.bolsillos, a.bolsillo).map((b) => (b.id === a.bolsillo.id ? a.bolsillo : b)),
+      }
+    case 'bolsillo/crearVarios': {
+      let lista = s.bolsillos
+      for (const b of a.bolsillos) {
+        const nuevo: Bolsillo = { ...b, id: uid(), ajustes: [] }
+        lista = [...quitarCategorias(lista, nuevo), nuevo]
+      }
+      return { ...s, bolsillos: lista }
+    }
+    case 'bolsillo/borrar':
+      return {
+        ...s,
+        bolsillos: s.bolsillos.filter((b) => b.id !== a.id),
+        // Los gastos se quedan; solo pierden la asignación a mano.
+        gastos: s.gastos.map((g) => {
+          if (g.bolsilloId !== a.id) return g
+          const { bolsilloId: _b, ...resto } = g
+          void _b
+          return resto
+        }),
+      }
+    case 'bolsillo/ajustar':
+      return {
+        ...s,
+        bolsillos: s.bolsillos.map((b) =>
+          b.id === a.id ? { ...b, ajustes: [{ ...a.ajuste, id: uid() }, ...b.ajustes] } : b,
+        ),
+      }
+    case 'bolsillo/quitarAjuste':
+      return {
+        ...s,
+        bolsillos: s.bolsillos.map((b) =>
+          b.id === a.id ? { ...b, ajustes: b.ajustes.filter((x) => x.id !== a.ajusteId) } : b,
+        ),
+      }
+    case 'bolsillo/mover': {
+      if (a.de === a.a || a.monto <= 0) return s
+      const nombre = (id: string) => s.bolsillos.find((b) => b.id === id)?.nombre ?? '?'
+      return {
+        ...s,
+        bolsillos: s.bolsillos.map((b) => {
+          if (b.id === a.de) {
+            const ajuste: AjusteBolsillo = { id: uid(), fecha: a.fecha, monto: -a.monto, nota: a.nota || `→ ${nombre(a.a)}` }
+            return { ...b, ajustes: [ajuste, ...b.ajustes] }
+          }
+          if (b.id === a.a) {
+            const ajuste: AjusteBolsillo = { id: uid(), fecha: a.fecha, monto: a.monto, nota: a.nota || `← ${nombre(a.de)}` }
+            return { ...b, ajustes: [ajuste, ...b.ajustes] }
+          }
+          return b
+        }),
+      }
+    }
+
+    case 'ingreso/agregar':
+      return { ...s, ingresos: [{ ...a.ingreso, id: uid() }, ...s.ingresos] }
+    case 'ingreso/editar':
+      return { ...s, ingresos: s.ingresos.map((i) => (i.id === a.ingreso.id ? a.ingreso : i)) }
+    case 'ingreso/borrar':
+      return { ...s, ingresos: s.ingresos.filter((i) => i.id !== a.id) }
+
     case 'importar':
       return { ...estadoInicial(), ...a.estado }
     case 'reiniciar':
@@ -238,6 +335,8 @@ const COLECCION: Record<Exclude<Fila['tipo'], 'perfil'>, keyof Omit<Estado, 'ver
   reto: 'retos',
   meta: 'metas',
   foto: 'fotos',
+  bolsillo: 'bolsillos',
+  ingreso: 'ingresos',
 }
 
 function aplicarFilas(s: Estado, filas: Fila[]): Estado {
@@ -278,6 +377,8 @@ export function filasDeEstado(e: Estado): { id: string; tipo: Fila['tipo']; data
     ...e.retos.map((x) => ({ id: x.id, tipo: 'reto' as const, data: x })),
     ...e.metas.map((x) => ({ id: x.id, tipo: 'meta' as const, data: x })),
     ...e.fotos.map((x) => ({ id: x.id, tipo: 'foto' as const, data: x })),
+    ...e.bolsillos.map((x) => ({ id: x.id, tipo: 'bolsillo' as const, data: x })),
+    ...e.ingresos.map((x) => ({ id: x.id, tipo: 'ingreso' as const, data: x })),
   ]
 }
 

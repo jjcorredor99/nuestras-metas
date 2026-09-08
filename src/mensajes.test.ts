@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aNumero, esLectura, huella, leerMensaje, type Lectura } from './mensajes'
+import { aNumero, esLectura, huella, leerMensaje, type Lectura, borradorIngresoDesde } from './mensajes'
 import { hoy } from './format'
 
 const leer = (texto: string, aprendidos = {}): Lectura => {
@@ -153,17 +153,65 @@ describe('lo que hay que descartar', () => {
   it('publicidad', () => {
     rechaza('Bancolombia: Aprovecha tu cupo de $5.000.000 con la tarjeta que te preaprobamos', 'no-es-gasto')
   })
-  it('plata que entra', () => {
-    rechaza('Nequi: Recibiste $50.000 de JUAN PEREZ', 'es-ingreso')
-  })
-  it('pago recibido también es ingreso', () => {
-    rechaza('Nequi: Recibiste un pago de $80.000 de MARIA', 'es-ingreso')
+  it('plata que entra sin valor', () => {
+    rechaza('Bancolombia: Recibiste una consignacion en tu cuenta de ahorros', 'es-ingreso')
   })
   it('mensaje sin valor', () => {
     rechaza('Bancolombia: Compraste en EXITO SUBA hoy', 'sin-monto')
   })
   it('texto que no viene al caso', () => {
     rechaza('Hola amor, ya voy en camino', 'no-es-gasto')
+  })
+})
+
+describe('ingresos', () => {
+  it('lo que recibes es un ingreso, y nunca de confianza alta', () => {
+    const l = leer('Nequi: Recibiste $50.000 de JUAN PEREZ')
+    expect(l.tipo).toBe('ingreso')
+    expect(l.monto).toBe(50000)
+    expect(l.comercio).toBe('JUAN PEREZ')
+    expect(l.banco).toBe('Nequi')
+    expect(l.confianza).toBe('baja')
+    expect(l.fuenteIngreso).toBe('otro')
+  })
+  it('un pago recibido también', () => {
+    const l = leer('Nequi: Recibiste un pago de $80.000 de MARIA')
+    expect(l.tipo).toBe('ingreso')
+    expect(l.monto).toBe(80000)
+    expect(l.comercio).toBe('MARIA')
+  })
+  it('transferencia recibida en Bancolombia, cortando en "en tu cuenta"', () => {
+    const l = leer('Bancolombia le informa que recibiste una transferencia por $1.200.000 de EMPRESA SAS en tu cuenta *1234')
+    expect(l.tipo).toBe('ingreso')
+    expect(l.monto).toBe(1200000)
+    expect(l.comercio).toBe('EMPRESA SAS')
+  })
+  it('nómina', () => {
+    const l = leer('Bancolombia: Abono a tu cuenta por $3.500.000 por concepto de NOMINA')
+    expect(l.tipo).toBe('ingreso')
+    expect(l.monto).toBe(3500000)
+    expect(l.fuenteIngreso).toBe('nomina')
+  })
+  it('te llegaron', () => {
+    const l = leer('Nequi: Te llegaron $20.000 de PEDRO')
+    expect(l.tipo).toBe('ingreso')
+    expect(l.comercio).toBe('PEDRO')
+  })
+  it('devolución', () => {
+    const l = leer('Bancolombia: Devolucion por $45.900 de EXITO a tu tarjeta *0126')
+    expect(l.tipo).toBe('ingreso')
+    expect(l.fuenteIngreso).toBe('devolucion')
+    expect(l.comercio).toBe('EXITO')
+  })
+  it('una compra sigue siendo compra aunque hable de devolución', () => {
+    const l = leer('Bancolombia: Compraste $20.000 en EXITO. Devolucion pendiente de aprobar')
+    expect(l.tipo).toBe('compra')
+  })
+  it('borrador de ingreso', () => {
+    const l = leer('Nequi: Recibiste $50.000 de JUAN PEREZ')
+    const b = borradorIngresoDesde(l, 'b')
+    expect(b).toMatchObject({ monto: 50000, de: 'b', fuente: 'otro', nota: 'JUAN PEREZ' })
+    expect(b.origen?.hash).toBe(l.hash)
   })
 })
 

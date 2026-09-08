@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useStore } from '../store'
 import type { Estado } from '../types'
 import { listarFotos, blobADataUrl, dataUrlABlob, guardarFoto } from '../db'
-import { Campo, useToast } from '../components/ui'
+import { Campo, InputMonto, useToast } from '../components/ui'
 import { Cuenta } from '../components/Cuenta'
 import { AtajoSms } from '../components/AtajoSms'
 import { useSync } from '../sync'
@@ -14,12 +14,23 @@ export function Ajustes() {
   const [nombreB, setNombreB] = useState(perfil.nombreB)
   const [nombrePareja, setNombrePareja] = useState(perfil.nombrePareja)
   const [moneda, setMoneda] = useState(perfil.moneda)
+  const [ingresoA, setIngresoA] = useState(perfil.ingresoEsperado?.a ?? 0)
+  const [ingresoB, setIngresoB] = useState(perfil.ingresoEsperado?.b ?? 0)
   const inputRef = useRef<HTMLInputElement>(null)
   const { mostrar, Toast } = useToast()
   const sync = useSync()
 
   const guardarPerfil = () => {
-    dispatch({ tipo: 'perfil', perfil: { nombreA: nombreA.trim(), nombreB: nombreB.trim(), nombrePareja: nombrePareja.trim(), moneda } })
+    dispatch({
+      tipo: 'perfil',
+      perfil: {
+        nombreA: nombreA.trim(),
+        nombreB: nombreB.trim(),
+        nombrePareja: nombrePareja.trim(),
+        moneda,
+        ingresoEsperado: { a: ingresoA, b: ingresoB },
+      },
+    })
     mostrar('Guardado')
   }
 
@@ -78,6 +89,15 @@ export function Ajustes() {
         <Campo label="Cómo le decimos a lo nuestro">
           <input value={nombrePareja} onChange={(e) => setNombrePareja(e.target.value)} />
         </Campo>
+        <div className="grid2">
+          <Campo label={`Ingreso mensual de ${nombreA || 'Nombre 1'}`}>
+            <InputMonto valor={ingresoA} onCambio={setIngresoA} />
+          </Campo>
+          <Campo label={`Ingreso mensual de ${nombreB || 'Nombre 2'}`}>
+            <InputMonto valor={ingresoB} onCambio={setIngresoB} />
+          </Campo>
+        </div>
+        <p className="mini suave">Lo esperado en un mes normal. Con eso la Caja reparte los bolsillos.</p>
         <Campo label="Moneda">
           <select value={moneda} onChange={(e) => setMoneda(e.target.value)}>
             <option value="COP">Pesos colombianos (COP)</option>

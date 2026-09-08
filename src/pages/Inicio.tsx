@@ -1,17 +1,18 @@
 import { useMemo } from 'react'
 import { useStore, saldoDeuda, ahorradoMeta, GRECIA_ID } from '../store'
-import { dinero, mesActual, nombreMes, diasParaVencer, diasHasta, pct, sumar } from '../format'
+import { dinero, hoy, mesActual, nombreMes, diasParaVencer, diasHasta, pct, sumar } from '../format'
 import { Barra } from '../components/ui'
 import { catInfo } from '../categorias'
 import { MuroMini } from './Muro'
 import { useSync } from '../sync'
 import { useEntrantes } from '../entrantes'
+import { resumenMes, comparacion, fraseComparacion, alertasBolsillos } from '../caja'
 
 export function Inicio({ ir }: { ir: (p: string) => void }) {
   const { estado } = useStore()
   const sync = useSync()
   const { pendientes: porConfirmar } = useEntrantes()
-  const { perfil, gastos, facturas, deudas, retos, metas } = estado
+  const { perfil, gastos, facturas, deudas, retos, metas, bolsillos, ingresos } = estado
   const mes = mesActual()
 
   const gastosMes = useMemo(() => gastos.filter((g) => g.fecha.startsWith(mes)), [gastos, mes])
@@ -44,6 +45,19 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
     if (h < 19) return 'Buenas tardes'
     return 'Buenas noches'
   })()
+
+  const hayCaja = bolsillos.length > 0 || ingresos.length > 0 || !!perfil.ingresoEsperado
+  const caja = useMemo(() => resumenMes(estado, mes), [estado, mes])
+  const frase = useMemo(
+    () =>
+      fraseComparacion(
+        comparacion(estado, mes, Number(hoy().slice(8, 10))),
+        (c) => catInfo(c).nombre,
+        (n) => dinero(n, perfil.moneda),
+      ),
+    [estado, mes, perfil.moneda],
+  )
+  const alertas = useMemo(() => alertasBolsillos(estado, mes), [estado, mes])
 
   const topCats = useMemo(() => {
     const m = new Map<string, number>()
@@ -88,11 +102,57 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
         <div className="tarjeta clic" onClick={() => ir('gastos')}>
           <div className="fila entre">
             <span className="titulo">
-              📩 {porConfirmar.length === 1 ? 'Un gasto por confirmar' : `${porConfirmar.length} gastos por confirmar`}
+              📩 {porConfirmar.length === 1 ? 'Un movimiento por confirmar' : `${porConfirmar.length} movimientos por confirmar`}
             </span>
             <span className="chica suave">Revisar →</span>
           </div>
           <p className="mini suave" style={{ marginTop: 4 }}>Llegaron por mensaje del banco.</p>
+        </div>
+      )}
+
+      {!hayCaja ? (
+        <div className="tarjeta mostaza clic" onClick={() => ir('caja')}>
+          <div className="fila entre">
+            <span className="titulo">💰 Arma tu caja</span>
+            <span className="chica suave">Empezar →</span>
+          </div>
+          <p className="chica suave" style={{ marginTop: 4 }}>
+            Reparte lo que entra en bolsillos y sabrás cuánto queda de verdad cada mes.
+          </p>
+        </div>
+      ) : caja.base === 0 ? (
+        <div className="tarjeta mostaza clic" onClick={() => ir('caja')}>
+          <span className="titulo">💰 Cuéntanos cuánto entra</span>
+          <p className="chica suave" style={{ marginTop: 4 }}>
+            Sin ingresos este mes ni un esperado, la caja no sabe cuánto queda.
+          </p>
+        </div>
+      ) : (
+        <div className="tarjeta clic" onClick={() => ir('caja')}>
+          <div className="fila entre">
+            <span className="etiqueta">Nos queda · {nombreMes(mes).split(' ')[0]}</span>
+            <span className="chica suave">Caja →</span>
+          </div>
+          <div className="cifra grande" style={caja.queda < 0 ? { color: '#b1402a' } : undefined}>
+            {dinero(caja.queda, perfil.moneda)}
+          </div>
+          <p className="chica" style={{ marginTop: 4 }}>
+            Libre de verdad <b>{dinero(caja.libre, perfil.moneda)}</b>
+          </p>
+          <p className="mini suave" style={{ marginTop: 2 }}>
+            Entró {dinero(caja.base, perfil.moneda)}
+            {caja.usaEsperado && ' (esperado)'} · Salió {dinero(caja.salidas, perfil.moneda)}
+          </p>
+          {frase && <p className="chica" style={{ marginTop: 8 }}>{frase}</p>}
+          {alertas.length > 0 && (
+            <div className="fila envolver" style={{ gap: 6, marginTop: 8 }}>
+              {alertas.map((v) => (
+                <span key={v.bolsillo.id} className={`chip ${v.estado === 'rojo' ? 'terracota' : 'mostaza'}`}>
+                  {v.bolsillo.emoji} {v.bolsillo.nombre} {v.estado === 'rojo' ? 'en rojo' : 'casi'}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -8,6 +8,9 @@ dispositivo (nada sale a internet).
 
 - **Inicio**: resumen del mes, Grecia 2027 con cuenta regresiva, facturas que vienen, retos y
   el muro de fotos.
+- **Caja**: lo que entra (esperado y real), repartido en bolsillos de la casa y de cada uno.
+  Dice cuánto queda del mes, cuánto queda "de verdad" tras facturas y mínimos de deuda, y
+  cómo van contra el mes pasado.
 - **Gastos**: quién pagó, si es compartido o personal, categoría, y el balance del mes
   (quién le debe a quién por lo compartido). Los SMS del banco se anotan solos con un Atajo del
   iPhone, o pegando el mensaje con el botón 📩.
@@ -65,7 +68,7 @@ Uso:
 
 Sin `.env` la app corre igual, solo en local, y en Ajustes queda el respaldo manual.
 
-Cómo funciona: cada gasto, factura, deuda, reto, meta, foto y el perfil es una fila en la
+Cómo funciona: cada gasto, factura, deuda, reto, meta, foto, bolsillo, ingreso y el perfil es una fila en la
 tabla `items` del hogar. `src/sync.tsx` compara el estado local con lo que ya está arriba y
 sube solo lo que cambió; escucha en tiempo real los cambios del otro celular y los aplica.
 Si dos personas editan lo mismo, gana el último cambio.
@@ -110,7 +113,9 @@ que llegan por notificación y para cuando el Atajo no alcanzó.
 
 Lee monto, comercio, fecha, tipo de movimiento y los últimos 4 de la tarjeta de Bancolombia,
 RappiCard, Falabella/CMR, Lulo, Nequi y Daviplata, y de paso de cualquier banco con formato
-parecido. Descarta claves dinámicas, códigos y publicidad, y no anota la plata que entra.
+parecido. Descarta claves dinámicas, códigos y publicidad. La plata que entra (nómina, una
+transferencia recibida, una devolución) la deja en *por confirmar* como ingreso: nunca la anota
+sola, porque un giro entre ustedes dos no es plata nueva.
 
 La categoría la propone `src/comercios.ts`. Si la corrigen al guardar, se acuerda de ese comercio
 para la próxima (y eso se sincroniza entre los dos). El mismo mensaje no se anota dos veces:
@@ -119,6 +124,32 @@ cada gasto guarda la huella del SMS del que salió.
 Las reglas del lector viven en `src/mensajes.ts` y están cubiertas con pruebas: `npm test`.
 Si un banco les manda un formato que no entiende, agreguen el mensaje al archivo de pruebas
 y ajusten el patrón.
+
+## Caja, bolsillos e ingresos
+
+La Caja responde la pregunta que da disciplina: *¿cuánto nos queda de verdad este mes?*
+
+- **Ingresos esperados**: lo que cada uno recibe en un mes normal (Ajustes o Caja → "Ingresos
+  esperados"). Con eso se reparten los bolsillos. Mientras no haya un ingreso real anotado en
+  el mes, la Caja planea con el esperado y lo marca así.
+- **Ingresos reales**: se anotan con el + de la Caja cuando llegan. Los que trae un SMS del
+  banco aparecen en *por confirmar* dentro de Gastos.
+- **Bolsillos**: cada uno tiene una asignación mensual y unas categorías. Un gasto cae en el
+  bolsillo de su ámbito (compartido → de la casa; personal → de quien pagó) que tenga su
+  categoría; si ninguno la tiene, en el que no tenga categorías (el comodín); y siempre se
+  puede cambiar a mano en el gasto. Una categoría vive en un solo bolsillo por ámbito.
+- **Lo que sobra**: cada bolsillo elige. *Se reinicia*: cada mes arranca con su asignación
+  (`asignación + ajustes del mes − gastado en el mes`). *Se guarda*: lo que no se gasta pasa al
+  mes siguiente (`saldo inicial + asignación × meses que lleva + ajustes − todo lo gastado`).
+  "Meter o sacar" y "Mover plata" entre bolsillos quedan como movimientos.
+- **Queda** = ingresos − (gastos + abonos a deudas + aportes a hitos). **Libre de verdad** =
+  queda − facturas sin pagar − mínimos de deuda sin abonar este mes. **Sin bolsillo** = ingresos
+  esperados − asignado: lo que queda para Grecia, deudas y ahorro.
+- La primera vez, "Armar mi caja" propone bolsillos con porcentajes sugeridos; se editan
+  antes de crear. Toda la matemática vive en `src/caja.ts`, con pruebas en `src/caja.test.ts`.
+
+Al publicar esta versión: abran la app en los dos celulares (cerrar y volver a abrir) antes
+de armar la caja, para que ninguno siga con la versión anterior.
 
 ## Estructura
 
@@ -129,10 +160,12 @@ src/
   db.ts           fotos en IndexedDB
   format.ts       dinero, fechas, porcentajes
   categorias.ts   categorías de gasto
-  mensajes.ts     lee el SMS del banco y saca el gasto (con pruebas)
+  mensajes.ts     lee el SMS del banco y saca el gasto o el ingreso (con pruebas)
+  caja.ts         bolsillos, resumen del mes y comparación con el mes pasado (con pruebas)
   comercios.ts    comercio -> categoría, y lo que ustedes le enseñan
   entrantes.tsx   bandeja de mensajes que mandó el Atajo del celular
   enlace.ts       mensajes que llegan por la URL (#gastos?texto=...)
-  components/ui   modal, campos, barras, confeti, toast
-  pages/          Inicio, Gastos, Facturas, Deudas, Retos, Metas, Muro, Ajustes
+  components/     ui (modal, campos, barras, confeti, toast), IngresoModal, ArmarCaja,
+                  DesdeMensaje, AtajoSms, Cuenta
+  pages/          Inicio, Caja, Gastos, Facturas, Deudas, Retos, Metas, Muro, Ajustes
 ```

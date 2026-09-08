@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { supabase, type FilaEntrante } from './supabase'
 import { useSync } from './sync'
 import { useStore } from './store'
-import { borradorDesde, esLectura, leerMensaje, type Lectura } from './mensajes'
+import { borradorDesde, esIngreso, esLectura, leerMensaje, type Lectura } from './mensajes'
 import type { Categoria, Estado, Persona } from './types'
 
 /** Un mensaje que el lector no entendió del todo: espera un toque de ustedes. */
@@ -84,14 +84,18 @@ export function EntrantesProvider({ children }: { children: ReactNode }) {
         const lectura = leerMensaje(fila.texto, aprendidos)
 
         // No es un gasto, o ese mensaje ya está anotado: se cierra en silencio.
-        const sobra = !esLectura(lectura) || estadoRef.current.gastos.some((g) => g.origen?.hash === lectura.hash)
+        const sobra =
+          !esLectura(lectura) ||
+          estadoRef.current.gastos.some((g) => g.origen?.hash === lectura.hash) ||
+          estadoRef.current.ingresos.some((i) => i.origen?.hash === lectura.hash)
         if (sobra) {
           // Si no hubo red, lo soltamos para reintentarlo después.
           if ((await reclamar(fila.id)) === 'falla') vistos.current.delete(fila.id)
           continue
         }
 
-        if (lectura.confianza === 'alta') {
+        // Los ingresos nunca se anotan solos: un giro entre ustedes dos no es plata nueva.
+        if (lectura.confianza === 'alta' && !esIngreso(lectura)) {
           // Reclamar antes de anotar: si los dos celulares lo ven, solo uno lo guarda.
           const quien = await reclamar(fila.id)
           if (quien === 'mio') {

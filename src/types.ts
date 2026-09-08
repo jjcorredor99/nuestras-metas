@@ -8,6 +8,8 @@ export interface Perfil {
   onboarded: boolean
   /** Comercios cuya categoría corrigieron a mano, para acertar la próxima vez. */
   aprendidos?: Record<string, Categoria>
+  /** Lo que cada uno espera que le entre al mes (para planear los bolsillos). */
+  ingresoEsperado?: { a: number; b: number }
 }
 
 export type Categoria =
@@ -38,6 +40,44 @@ export interface Gasto {
   categoria: Categoria
   pagadoPor: Persona
   compartido: boolean
+  nota: string
+  origen?: OrigenGasto
+  /** Bolsillo elegido a mano; sin esto, cae por categoría. */
+  bolsilloId?: string
+}
+
+/** De quién es un bolsillo: de la casa o de una persona. */
+export type Ambito = 'hogar' | Persona
+
+/** Meter, sacar o mover plata de un bolsillo (monto con signo). */
+export interface AjusteBolsillo {
+  id: string
+  fecha: string
+  monto: number
+  nota: string
+}
+
+export interface Bolsillo {
+  id: string
+  nombre: string
+  emoji: string
+  ambito: Ambito
+  asignacion: number // lo que se le mete cada mes
+  acumula: boolean // true: lo que sobra pasa al mes siguiente; false: se reinicia
+  categorias: Categoria[] // [] = recibe lo que no tenga bolsillo en su ámbito
+  saldoInicial: number // solo pesa si acumula
+  desde: string // 'YYYY-MM' desde cuándo cuenta
+  ajustes: AjusteBolsillo[]
+}
+
+export type FuenteIngreso = 'nomina' | 'extra' | 'devolucion' | 'otro'
+
+export interface Ingreso {
+  id: string
+  fecha: string // YYYY-MM-DD
+  monto: number
+  de: Persona
+  fuente: FuenteIngreso
   nota: string
   origen?: OrigenGasto
 }
@@ -121,4 +161,6 @@ export interface Estado {
   retos: Reto[]
   metas: Meta[]
   fotos: Foto[]
+  bolsillos: Bolsillo[]
+  ingresos: Ingreso[]
 }

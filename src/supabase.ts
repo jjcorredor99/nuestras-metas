@@ -19,7 +19,10 @@ export interface Hogar {
   creado_en: string
 }
 
-export type TipoItem = 'perfil' | 'gasto' | 'factura' | 'deuda' | 'reto' | 'meta' | 'foto'
+export type TipoItem = 'perfil' | 'gasto' | 'factura' | 'deuda' | 'reto' | 'meta' | 'foto' | 'bolsillo' | 'ingreso'
+
+/** Los tipos que esta versión entiende. Lo demás se ignora sin tocarlo (ni se borra). */
+export const TIPOS_ITEM: readonly TipoItem[] = ['perfil', 'gasto', 'factura', 'deuda', 'reto', 'meta', 'foto', 'bolsillo', 'ingreso']
 
 export interface Fila {
   hogar_id: string

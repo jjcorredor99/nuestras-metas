@@ -3,7 +3,7 @@ import { Modal } from './ui'
 import { useStore } from '../store'
 import { catInfo } from '../categorias'
 import { dinero, fechaCorta } from '../format'
-import { esLectura, leerMensaje, MOTIVOS, type Lectura } from '../mensajes'
+import { esIngreso, esLectura, leerMensaje, MOTIVOS, type Lectura } from '../mensajes'
 
 /**
  * Pegar el mensaje del banco y ver el gasto antes de guardarlo.
@@ -74,7 +74,9 @@ export function DesdeMensaje({
             </div>
             <div className="cifra">{dinero(lectura.monto, estado.perfil.moneda)}</div>
             <p className="chica">
-              {catInfo(lectura.categoria).emoji} {lectura.comercio || catInfo(lectura.categoria).nombre}
+              {esIngreso(lectura)
+                ? `💵 Entró de ${lectura.comercio || 'alguien'}`
+                : `${catInfo(lectura.categoria).emoji} ${lectura.comercio || catInfo(lectura.categoria).nombre}`}
             </p>
             {lectura.confianza === 'baja' && <p className="mini suave">Revísalo antes de guardar, no estoy seguro.</p>}
           </div>

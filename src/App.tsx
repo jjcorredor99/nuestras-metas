@@ -12,9 +12,11 @@ import { Retos } from './pages/Retos'
 import { Metas } from './pages/Metas'
 import { Muro } from './pages/Muro'
 import { Ajustes } from './pages/Ajustes'
+import { Caja } from './pages/Caja'
 
 const PAGINAS = [
   { id: 'inicio', texto: 'Inicio', ico: '🏡' },
+  { id: 'caja', texto: 'Caja', ico: '💰' },
   { id: 'gastos', texto: 'Gastos', ico: '🧾' },
   { id: 'facturas', texto: 'Facturas', ico: '📬' },
   { id: 'deudas', texto: 'Deudas', ico: '⛰️' },
@@ -60,7 +62,7 @@ function Shell() {
         {PAGINAS.map((p) => (
           <button
             key={p.id}
-            className={`${pagina === p.id ? 'activo' : ''} ${p.id === 'ajustes' ? 'solo-escritorio' : ''}`}
+            className={`${pagina === p.id ? 'activo' : ''} ${p.id === 'ajustes' || p.id === 'muro' ? 'solo-escritorio' : ''}`}
             onClick={() => ir(p.id)}
           >
             <span className="ico">{p.ico}</span>
@@ -70,6 +72,7 @@ function Shell() {
       </nav>
       <main className="contenido">
         {pagina === 'inicio' && <Inicio ir={ir} />}
+        {pagina === 'caja' && <Caja />}
         {pagina === 'gastos' && <Gastos />}
         {pagina === 'facturas' && <Facturas />}
         {pagina === 'deudas' && <Deudas />}

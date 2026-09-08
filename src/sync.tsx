@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { supabase, type Hogar, type Fila } from './supabase'
+import { supabase, TIPOS_ITEM, type Hogar, type Fila } from './supabase'
 import { useStore, filasDeEstado } from './store'
 import type { Estado } from './types'
 import { leerFoto, guardarFoto, borrarFoto } from './db'
@@ -125,6 +125,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       if (filas.length === 0) return
       const mapa = conocidas.current ?? new Map<string, string>()
       for (const f of filas) {
+        // Una fila de un tipo que esta versión no conoce no se anota como "conocida":
+        // así una app vieja no la borra de la nube por no tenerla en su estado.
+        if (!TIPOS_ITEM.includes(f.tipo)) continue
         if (f.borrado) mapa.delete(f.id)
         else mapa.set(f.id, canon(f.data))
       }
@@ -248,7 +251,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           if (f.actualizado_por === usuario.id) {
             // Eco de lo que subimos: solo anota que ya está arriba.
             const m = conocidas.current
-            if (m) {
+            if (m && TIPOS_ITEM.includes(f.tipo)) {
               if (f.borrado) m.delete(f.id)
               else m.set(f.id, canon(f.data))
             }

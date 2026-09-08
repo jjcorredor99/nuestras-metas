@@ -77,3 +77,16 @@ export function mesesRestantes(iso: string): number {
   const ahora = new Date()
   return Math.max(0, (y - ahora.getFullYear()) * 12 + (m - 1 - ahora.getMonth()))
 }
+
+/** '2026-01' -> '2025-12' */
+export function mesAnterior(yyyymm: string): string {
+  const [y, m] = yyyymm.split('-').map(Number)
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+}
+
+/** Meses que hay de `desde` a `hasta`, contando los dos extremos. 0 si hasta es anterior. */
+export function mesesEntre(desde: string, hasta: string): number {
+  const [y1, m1] = desde.split('-').map(Number)
+  const [y2, m2] = hasta.split('-').map(Number)
+  return Math.max(0, (y2 - y1) * 12 + (m2 - m1) + 1)
+}

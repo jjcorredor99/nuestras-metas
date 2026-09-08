@@ -6,8 +6,10 @@ import { CATEGORIAS, catInfo } from '../categorias'
 import { Modal, Campo, Segmento, Barra, Vacio, InputMonto, useToast } from '../components/ui'
 import { DesdeMensaje } from '../components/DesdeMensaje'
 import { useEntrantes, type Pendiente } from '../entrantes'
-import { borradorDesde, type Lectura } from '../mensajes'
+import { borradorDesde, borradorIngresoDesde, esIngreso, type Lectura } from '../mensajes'
+import { IngresoModal, type BorradorIngreso } from '../components/IngresoModal'
 import { alLlegarMensaje, tomarMensajePendiente } from '../enlace'
+import { ambitoDe, bolsilloDe, candidatos } from '../caja'
 
 type Borrador = Omit<Gasto, 'id'> & { id?: string }
 
@@ -22,7 +24,7 @@ const nuevo = (): Borrador => ({
 
 export function Gastos() {
   const { estado, dispatch } = useStore()
-  const { perfil, gastos } = estado
+  const { perfil, gastos, bolsillos, ingresos } = estado
   const [mes, setMes] = useState(mesActual())
   const [editando, setEditando] = useState<Borrador | null>(null)
   const { mostrar, Toast } = useToast()
@@ -33,6 +35,8 @@ export function Gastos() {
   const [entranteId, setEntranteId] = useState<string | null>(null)
   // Lo que el lector propuso, para aprender si lo corrigen.
   const [sugerida, setSugerida] = useState<{ comercio: string; categoria: Categoria } | null>(null)
+  // Un mensaje que resultó ser plata que entró: se revisa como ingreso.
+  const [ingresoNuevo, setIngresoNuevo] = useState<BorradorIngreso | null>(null)
 
   // Un enlace con ?texto= (por ejemplo desde un Atajo) abre el mensaje listo para revisar.
   useEffect(() => {
@@ -113,9 +117,14 @@ export function Gastos() {
   /** Abre el formulario con lo que salió del mensaje. */
   const abrirLectura = (l: Lectura, pagadoPor: Persona, fuente: 'sms' | 'pegado', idEntrante: string | null) => {
     setPegando(null)
-    if (gastos.some((g) => g.origen?.hash === l.hash)) {
+    if (gastos.some((g) => g.origen?.hash === l.hash) || ingresos.some((i) => i.origen?.hash === l.hash)) {
       mostrar('Ese mensaje ya estaba anotado')
       if (idEntrante) cerrar(idEntrante)
+      return
+    }
+    if (esIngreso(l)) {
+      setEntranteId(idEntrante)
+      setIngresoNuevo(borradorIngresoDesde(l, pagadoPor, fuente))
       return
     }
     setSugerida({ comercio: l.comercio, categoria: l.categoria })
@@ -163,8 +172,9 @@ export function Gastos() {
             <div className="pendiente" key={p.id}>
               <div className="fila entre">
                 <span className="titulo">
-                  {p.lectura ? catInfo(p.lectura.categoria).emoji : '📩'}{' '}
-                  {p.lectura?.comercio || 'Mensaje del banco'}
+                  {p.lectura && esIngreso(p.lectura)
+                    ? `💵 Entró de ${p.lectura.comercio || 'alguien'}`
+                    : `${p.lectura ? catInfo(p.lectura.categoria).emoji : '📩'} ${p.lectura?.comercio || 'Mensaje del banco'}`}
                 </span>
                 {p.lectura && <span className="monto">{dinero(p.lectura.monto, perfil.moneda)}</span>}
               </div>
@@ -240,6 +250,10 @@ export function Gastos() {
                     <div className="titulo">{g.nota || info.nombre}</div>
                     <div className="chica suave">
                       {nombreDe(perfil, g.pagadoPor)} · {g.compartido ? 'compartido' : 'personal'}
+                      {(() => {
+                        const b = bolsilloDe(g, bolsillos)
+                        return b ? ` · ${b.emoji} ${b.nombre}` : ''
+                      })()}
                     </div>
                   </div>
                   <div className="monto">{dinero(g.monto, perfil.moneda)}</div>
@@ -272,6 +286,20 @@ export function Gastos() {
             setSugerida(null)
             setEntranteId(null)
             setEditando({ ...nuevo(), nota })
+          }}
+        />
+      )}
+
+      {ingresoNuevo && (
+        <IngresoModal
+          inicial={ingresoNuevo}
+          onCerrar={() => {
+            setIngresoNuevo(null)
+            setEntranteId(null)
+          }}
+          onGuardado={() => {
+            if (entranteId) cerrar(entranteId)
+            mostrar('Ingreso anotado 💵')
           }}
         />
       )}
@@ -318,6 +346,30 @@ export function Gastos() {
                 ]}
               />
             </Campo>
+            {bolsillos.length > 0 &&
+              (() => {
+                const { bolsilloId: _b, ...sinElegir } = editando
+                void _b
+                const auto = bolsilloDe({ ...sinElegir, id: editando.id ?? '' } as Gasto, bolsillos)
+                const opciones = candidatos(ambitoDe(editando), bolsillos)
+                const actual = editando.bolsilloId ? bolsillos.find((b) => b.id === editando.bolsilloId) : undefined
+                if (actual && !opciones.includes(actual)) opciones.push(actual)
+                return (
+                  <Campo label="Bolsillo">
+                    <select
+                      value={editando.bolsilloId ?? ''}
+                      onChange={(e) => setEditando(e.target.value ? { ...sinElegir, bolsilloId: e.target.value } : sinElegir)}
+                    >
+                      <option value="">Automático · {auto ? `${auto.emoji} ${auto.nombre}` : 'sin bolsillo'}</option>
+                      {opciones.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.emoji} {b.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </Campo>
+                )
+              })()}
             <div className="grid2">
               <Campo label="Fecha">
                 <input type="date" value={editando.fecha} onChange={(e) => setEditando({ ...editando, fecha: e.target.value })} />

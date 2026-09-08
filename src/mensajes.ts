@@ -227,12 +227,16 @@ export function notaDe(l: Lectura): string {
   return `${como[l.tipo]} ${l.banco !== 'Desconocido' ? l.banco : ''}`.trim()
 }
 
-/** Convierte una lectura en el gasto listo para guardar. */
+/**
+ * Convierte una lectura en el gasto listo para guardar.
+ * Lo que llega por mensaje sale como personal: son compras de la tarjeta de
+ * quien recibe el SMS. Si resulta ser de los dos, se cambia en el gasto.
+ */
 export function borradorDesde(
   l: Lectura,
   pagadoPor: Persona,
   fuente: OrigenGasto['fuente'] = 'sms',
-  compartido = true,
+  compartido = false,
 ): Omit<Gasto, 'id'> {
   return {
     fecha: l.fecha,

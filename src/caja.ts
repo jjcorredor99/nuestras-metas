@@ -1,6 +1,6 @@
 // La caja: cuánto entra, cuánto sale y cuánto queda en cada bolsillo.
 // Todo es puro (sin React ni store) para poder probarlo a secas.
-import type { Ambito, Bolsillo, Categoria, Deuda, Estado, Gasto, Persona } from './types'
+import type { Ambito, Bolsillo, Categoria, Deuda, Estado, Gasto, Perfil, Persona } from './types'
 import { mesAnterior, mesesEntre, pct, sumar } from './format'
 
 // ---------- a qué bolsillo va un gasto ----------
@@ -18,6 +18,7 @@ export const candidatos = (ambito: Ambito, bolsillos: Bolsillo[]): Bolsillo[] =>
 /**
  * 1) el elegido a mano, si existe · 2) el de su ámbito con esa categoría
  * · 3) el comodín de su ámbito (sin categorías) · 4) ninguno.
+ * Una obligación fuera de casa nunca cae al comodín: no es plata para vivir.
  */
 export function bolsilloDe(g: Gasto, bolsillos: Bolsillo[]): Bolsillo | null {
   if (g.bolsilloId) {
@@ -27,9 +28,23 @@ export function bolsilloDe(g: Gasto, bolsillos: Bolsillo[]): Bolsillo | null {
   const propios = candidatos(ambitoDe(g), bolsillos)
   return (
     propios.find((b) => b.categorias.includes(g.categoria)) ??
-    propios.find((b) => b.categorias.length === 0) ??
+    (g.categoria === 'fuera' ? null : propios.find((b) => b.categorias.length === 0)) ??
     null
   )
+}
+
+// ---------- las tres cajas ----------
+
+/** Un bolsillo de obligaciones fuera de casa es el que recibe la categoría 'fuera'. */
+export const esFueraDeCasa = (b: Pick<Bolsillo, 'categorias'>): boolean => b.categorias.includes('fuera')
+
+/** Solo dos cajas tienen gastos: lo que sale para obligaciones fuera de casa y lo que sale para vivir. */
+export type Caja = 'fuera' | 'vivir'
+
+export const cajaDe = (g: Gasto, bolsillos: Bolsillo[]): Caja => {
+  if (g.categoria === 'fuera') return 'fuera'
+  const b = bolsilloDe(g, bolsillos)
+  return b && esFueraDeCasa(b) ? 'fuera' : 'vivir'
 }
 
 /** Una categoría vive en un solo bolsillo por ámbito: al asignarla, se la quita a los demás. */
@@ -86,20 +101,24 @@ export interface VistaBolsillo {
   estado: EstadoBolsillo
 }
 
+/** Rojo si ya se pasó; amarillo desde el 80%. */
+export const semaforo = (gastado: number, disponible: number, tope: number): EstadoBolsillo =>
+  disponible < 0 ? 'rojo' : tope > 0 && gastado / tope >= 0.8 ? 'amarillo' : 'bien'
+
 export function vistaBolsillo(b: Bolsillo, e: Estado, mes: string): VistaBolsillo {
   const gastado = gastadoEn(b, e.gastos, e.bolsillos, mes)
   const disp = disponible(b, e.gastos, e.bolsillos, mes)
   const tope = gastado + disp
-  const estado: EstadoBolsillo = disp < 0 ? 'rojo' : tope > 0 && gastado / tope >= 0.8 ? 'amarillo' : 'bien'
-  return { bolsillo: b, gastado, disponible: disp, tope, avance: disp < 0 ? 100 : pct(gastado, tope), estado }
+  return { bolsillo: b, gastado, disponible: disp, tope, avance: disp < 0 ? 100 : pct(gastado, tope), estado: semaforo(gastado, disp, tope) }
 }
 
 export const vigentes = (e: Estado, mes: string): Bolsillo[] => e.bolsillos.filter((b) => existeEn(b, mes))
 
+/** Una obligación fuera de casa que se cumplió completa no es "casi": solo avisa si se pasó. */
 export const alertasBolsillos = (e: Estado, mes: string): VistaBolsillo[] =>
   vigentes(e, mes)
     .map((b) => vistaBolsillo(b, e, mes))
-    .filter((v) => v.estado !== 'bien')
+    .filter((v) => (esFueraDeCasa(v.bolsillo) ? v.estado === 'rojo' : v.estado !== 'bien'))
 
 /** Gastos del mes de un ámbito que no cayeron en ningún bolsillo. */
 export function sinBolsillo(e: Estado, mes: string, ambito: Ambito): { n: number; monto: number } {
@@ -112,6 +131,13 @@ export function sinBolsillo(e: Estado, mes: string, ambito: Ambito): { n: number
 // ---------- el mes completo ----------
 
 const saldoDe = (d: Deuda): number => Math.max(0, d.montoInicial - sumar(d.abonos.map((a) => a.monto)))
+
+const abonosDelMes = (e: Estado, mes: string) => e.deudas.flatMap((d) => d.abonos.filter((a) => a.fecha.startsWith(mes)))
+const aportesDelMes = (e: Estado, mes: string) => e.metas.flatMap((m) => m.aportes.filter((a) => a.fecha.startsWith(mes)))
+
+/** Lo que hay que pagar sí o sí este mes en deudas que aún deben. */
+export const minimosMensuales = (deudas: Deuda[]): number =>
+  sumar(deudas.filter((d) => saldoDe(d) > 0).map((d) => d.pagoMinimo))
 
 export interface ResumenMes {
   ingresosReales: number
@@ -143,8 +169,8 @@ export function resumenMes(e: Estado, mes: string): ResumenMes {
   const base = usaEsperado ? ingresosEsperados : ingresosReales
 
   const gastado = sumar(e.gastos.filter((g) => delMes(g.fecha)).map((g) => g.monto))
-  const abonos = sumar(e.deudas.flatMap((d) => d.abonos.filter((a) => delMes(a.fecha)).map((a) => a.monto)))
-  const aportes = sumar(e.metas.flatMap((m) => m.aportes.filter((a) => delMes(a.fecha)).map((a) => a.monto)))
+  const abonos = sumar(abonosDelMes(e, mes).map((a) => a.monto))
+  const aportes = sumar(aportesDelMes(e, mes).map((a) => a.monto))
   const salidas = gastado + abonos + aportes
   const queda = base - salidas
 
@@ -273,7 +299,7 @@ export interface Plantilla {
   emoji: string
   ambito: Ambito
   categorias: Categoria[]
-  /** Porcentaje sugerido del ingreso (del hogar, o de esa persona si es personal). */
+  /** Porcentaje sugerido del sueldo con el que se vive. */
   pct: number
   acumula: boolean
 }
@@ -290,8 +316,8 @@ export const PLANTILLAS: Plantilla[] = [
 
 const aMiles = (n: number) => Math.round(n / 1000) * 1000
 
-export function montoSugerido(p: Plantilla, ingresos: { a: number; b: number }): number {
-  const base = p.ambito === 'hogar' ? ingresos.a + ingresos.b : ingresos[p.ambito]
+/** `base` es el sueldo con el que se vive: todas las filas, de la casa o de cada uno, salen de ahí. */
+export function montoSugerido(p: Plantilla, base: number): number {
   return aMiles((p.pct / 100) * base)
 }
 
@@ -309,4 +335,146 @@ export function bolsillosDesdePlantillas(
     saldoInicial: 0,
     desde: mes,
   }))
+}
+
+/** Un bolsillo de obligaciones fuera de casa por persona (solo para quien tenga monto). */
+export function bolsillosFueraDeCasa(montos: Record<Persona, number>, mes: string): Omit<Bolsillo, 'id' | 'ajustes'>[] {
+  return (['a', 'b'] as Persona[])
+    .filter((p) => montos[p] > 0)
+    .map((p) => ({
+      nombre: 'Obligaciones fuera de casa',
+      emoji: '📤',
+      ambito: p,
+      asignacion: montos[p],
+      acumula: false,
+      categorias: ['fuera'],
+      saldoInicial: 0,
+      desde: mes,
+    }))
+}
+
+// ---------- la regla: vivir con un sueldo ----------
+
+/** Con qué sueldo se vive. 'menor' toma el más bajo de los que sean mayores a cero. */
+export function sueldoParaVivir(perfil: Perfil): { persona: Persona | null; monto: number } {
+  const esperado = perfil.ingresoEsperado ?? { a: 0, b: 0 }
+  const a = esperado.a || 0
+  const b = esperado.b || 0
+  const elegido = perfil.plan?.sueldoVivir ?? 'menor'
+  if (elegido !== 'menor') return { persona: elegido, monto: esperado[elegido] || 0 }
+  if (a <= 0 && b <= 0) return { persona: null, monto: 0 }
+  if (a <= 0) return { persona: 'b', monto: b }
+  if (b <= 0) return { persona: 'a', monto: a }
+  return a <= b ? { persona: 'a', monto: a } : { persona: 'b', monto: b }
+}
+
+/** Todo lo que salió en el mes para vivir: cualquier gasto que no sea una obligación fuera de casa. */
+export const gastadoParaVivir = (e: Estado, mes: string): number =>
+  sumar(e.gastos.filter((g) => g.fecha.startsWith(mes) && cajaDe(g, e.bolsillos) === 'vivir').map((g) => g.monto))
+
+export interface VistaUnSueldo {
+  persona: Persona | null
+  tope: number
+  gastado: number
+  disponible: number
+  avance: number
+  estado: EstadoBolsillo
+}
+
+/** La tarjeta de arriba: ¿vamos viviendo con un sueldo? */
+export function vistaUnSueldo(e: Estado, mes: string): VistaUnSueldo {
+  const { persona, monto: tope } = sueldoParaVivir(e.perfil)
+  const gastado = gastadoParaVivir(e, mes)
+  const disp = tope - gastado
+  return { persona, tope, gastado, disponible: disp, avance: disp < 0 ? 100 : pct(gastado, tope), estado: semaforo(gastado, disp, tope) }
+}
+
+export interface Reparto {
+  /** Ingresos esperados de los dos. */
+  entra: number
+  fuera: { plan: number; real: number; porPersona: Record<Persona, { plan: number; real: number }> }
+  vivir: { tope: number; asignado: number; gastado: number; colchon: number }
+  avanzar: {
+    /** entra − obligaciones − un sueldo. Negativo cuando el plan no cierra. */
+    plan: number
+    deudas: number
+    ahorro: number
+    real: number
+    sinRepartir: number
+  }
+}
+
+/** La cascada del mes: entra → obligaciones fuera de casa → vivir (un sueldo) → avanzar. */
+export function reparto(e: Estado, mes: string): Reparto {
+  const esperado = e.perfil.ingresoEsperado ?? { a: 0, b: 0 }
+  const entra = (esperado.a || 0) + (esperado.b || 0)
+  const activos = vigentes(e, mes)
+  const delMes = e.gastos.filter((g) => g.fecha.startsWith(mes))
+
+  const porPersona = { a: { plan: 0, real: 0 }, b: { plan: 0, real: 0 } }
+  for (const p of ['a', 'b'] as Persona[]) {
+    porPersona[p].plan = sumar(activos.filter((b) => b.ambito === p && esFueraDeCasa(b)).map((b) => b.asignacion))
+    porPersona[p].real = sumar(delMes.filter((g) => g.pagadoPor === p && cajaDe(g, e.bolsillos) === 'fuera').map((g) => g.monto))
+  }
+  const fueraPlan = porPersona.a.plan + porPersona.b.plan
+  const fueraReal = sumar(delMes.filter((g) => cajaDe(g, e.bolsillos) === 'fuera').map((g) => g.monto))
+
+  const tope = sueldoParaVivir(e.perfil).monto
+  const asignado = sumar(activos.filter((b) => !esFueraDeCasa(b)).map((b) => b.asignacion))
+  const gastado = gastadoParaVivir(e, mes)
+
+  const avanzarPlan = entra - fueraPlan - tope
+  const av = e.perfil.plan?.avanzar ?? { deudas: 0, ahorro: 0 }
+  const real = sumar(abonosDelMes(e, mes).map((a) => a.monto)) + sumar(aportesDelMes(e, mes).map((a) => a.monto))
+
+  return {
+    entra,
+    fuera: { plan: fueraPlan, real: fueraReal, porPersona },
+    vivir: { tope, asignado, gastado, colchon: tope - asignado },
+    avanzar: { plan: avanzarPlan, deudas: av.deudas, ahorro: av.ahorro, real, sinRepartir: avanzarPlan - av.deudas - av.ahorro },
+  }
+}
+
+// ---------- avanzar: deudas y ahorro en equipo ----------
+
+export interface AvanceAvanzar {
+  metaDeudas: number
+  abonos: number
+  abonosPor: Record<Persona, number>
+  metaAhorro: number
+  aportes: number
+  aportesPor: Record<Persona, number>
+}
+
+export function avanceAvanzar(e: Estado, mes: string): AvanceAvanzar {
+  const av = e.perfil.plan?.avanzar ?? { deudas: 0, ahorro: 0 }
+  const abonos = abonosDelMes(e, mes)
+  const aportes = aportesDelMes(e, mes)
+  const por = (lista: { monto: number; por: Persona }[], p: Persona) => sumar(lista.filter((x) => x.por === p).map((x) => x.monto))
+  return {
+    metaDeudas: av.deudas,
+    abonos: sumar(abonos.map((a) => a.monto)),
+    abonosPor: { a: por(abonos, 'a'), b: por(abonos, 'b') },
+    metaAhorro: av.ahorro,
+    aportes: sumar(aportes.map((a) => a.monto)),
+    aportesPor: { a: por(aportes, 'a'), b: por(aportes, 'b') },
+  }
+}
+
+/**
+ * Cuántos meses faltan para quedar libres si cada mes se abona `ataqueMensual`, sin contar intereses.
+ * 0 si ya no deben nada; null si no hay con qué (ataque en cero y todavía deben).
+ */
+export function mesesParaLibres(deudas: Deuda[], ataqueMensual: number): number | null {
+  const saldo = sumar(deudas.map(saldoDe))
+  if (saldo <= 0) return 0
+  if (ataqueMensual <= 0) return null
+  return Math.ceil(saldo / ataqueMensual)
+}
+
+/** Cómo repartir lo que sobra: a deudas al menos los mínimos y por defecto tres cuartos; el resto a ahorro. */
+export function sugerirAvanzar(sobra: number, minimos: number): { deudas: number; ahorro: number } {
+  if (sobra <= 0) return { deudas: 0, ahorro: 0 }
+  const deudas = Math.min(sobra, Math.max(minimos, aMiles(sobra * 0.75)))
+  return { deudas, ahorro: Math.max(0, sobra - deudas) }
 }

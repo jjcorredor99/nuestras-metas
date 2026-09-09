@@ -6,7 +6,7 @@ import { catInfo } from '../categorias'
 import { MuroMini } from './Muro'
 import { useSync } from '../sync'
 import { useEntrantes } from '../entrantes'
-import { resumenMes, comparacion, fraseComparacion, alertasBolsillos } from '../caja'
+import { resumenMes, comparacion, fraseComparacion, alertasBolsillos, vistaUnSueldo } from '../caja'
 
 export function Inicio({ ir }: { ir: (p: string) => void }) {
   const { estado } = useStore()
@@ -58,6 +58,8 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
     [estado, mes, perfil.moneda],
   )
   const alertas = useMemo(() => alertasBolsillos(estado, mes), [estado, mes])
+  const unSueldo = useMemo(() => vistaUnSueldo(estado, mes), [estado, mes])
+  const conRegla = !!perfil.plan && unSueldo.tope > 0
 
   const topCats = useMemo(() => {
     const m = new Map<string, number>()
@@ -126,6 +128,38 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
           <p className="chica suave" style={{ marginTop: 4 }}>
             Sin ingresos este mes ni un esperado, la caja no sabe cuánto queda.
           </p>
+        </div>
+      ) : conRegla ? (
+        <div className="tarjeta clic" onClick={() => ir('caja')}>
+          <div className="fila entre">
+            <span className="etiqueta">Vivimos con un sueldo · {nombreMes(mes).split(' ')[0]}</span>
+            <span className={`chip ${unSueldo.estado === 'rojo' ? 'terracota' : unSueldo.estado === 'amarillo' ? 'mostaza' : 'oliva'}`}>
+              {unSueldo.estado === 'rojo' ? 'nos pasamos' : unSueldo.estado === 'amarillo' ? 'casi' : 'vamos bien'}
+            </span>
+          </div>
+          <div className="cifra grande" style={unSueldo.disponible < 0 ? { color: '#b1402a' } : undefined}>
+            {dinero(unSueldo.disponible, perfil.moneda)}
+          </div>
+          <p className="chica" style={{ marginTop: 2 }}>
+            {unSueldo.disponible >= 0 ? 'quedan' : 'de más'} del sueldo de {unSueldo.persona ? (unSueldo.persona === 'a' ? perfil.nombreA : perfil.nombreB) : '—'}
+          </p>
+          <div style={{ marginTop: 8 }}>
+            <Barra valor={unSueldo.avance} color={unSueldo.estado === 'rojo' ? '' : unSueldo.estado === 'amarillo' ? 'mostaza' : 'oliva'} />
+          </div>
+          <p className="mini suave" style={{ marginTop: 6 }}>
+            Gastado {dinero(unSueldo.gastado, perfil.moneda)} de {dinero(unSueldo.tope, perfil.moneda)} · queda del mes{' '}
+            {dinero(caja.queda, perfil.moneda)}
+          </p>
+          {frase && <p className="chica" style={{ marginTop: 8 }}>{frase}</p>}
+          {alertas.length > 0 && (
+            <div className="fila envolver" style={{ gap: 6, marginTop: 8 }}>
+              {alertas.map((v) => (
+                <span key={v.bolsillo.id} className={`chip ${v.estado === 'rojo' ? 'terracota' : 'mostaza'}`}>
+                  {v.bolsillo.emoji} {v.bolsillo.nombre} {v.estado === 'rojo' ? 'en rojo' : 'casi'}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="tarjeta clic" onClick={() => ir('caja')}>

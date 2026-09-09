@@ -318,7 +318,9 @@ export function Gastos() {
                     type="button"
                     title={c.nombre}
                     className={editando.categoria === c.id ? 'activo' : ''}
-                    onClick={() => setEditando({ ...editando, categoria: c.id })}
+                    onClick={() =>
+                      setEditando({ ...editando, categoria: c.id, compartido: c.id === 'fuera' ? false : editando.compartido })
+                    }
                   >
                     {c.emoji}
                   </button>

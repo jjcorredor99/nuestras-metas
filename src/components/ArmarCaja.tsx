@@ -218,7 +218,7 @@ export function ArmarCaja({ onCerrar, modo = 'completo' }: { onCerrar: () => voi
             </>
           )}
 
-          <p className={`chica ${colchon < 0 ? 'negrita' : 'suave'}`} style={colchon < 0 ? { color: '#b1402a' } : undefined}>
+          <p className={`chica ${colchon < 0 ? 'negrita' : 'suave'}`} style={colchon < 0 ? { color: 'var(--alerta)' } : undefined}>
             {colchon >= 0
               ? `Quedan ${dinero(colchon, perfil.moneda)} del sueldo sin bolsillo, de colchón para lo que se salga del plan.`
               : `Te pasaste del sueldo por ${dinero(-colchon, perfil.moneda)}. Baja algún monto.`}
@@ -258,14 +258,14 @@ export function ArmarCaja({ onCerrar, modo = 'completo' }: { onCerrar: () => voi
                 <InputMonto autoFocus valor={avanzar.deudas} onCambio={(deudas) => setAvanzar({ ...avanzar, deudas })} />
               </Campo>
               {minimos > 0 && avanzar.deudas < minimos && (
-                <p className="mini negrita" style={{ color: '#b1402a' }}>
+                <p className="mini negrita" style={{ color: 'var(--alerta)' }}>
                   Los mínimos de este mes suman {dinero(minimos, perfil.moneda)}.
                 </p>
               )}
               <Campo label="✈️ A Grecia y al ahorro">
                 <InputMonto valor={avanzar.ahorro} onCambio={(ahorro) => setAvanzar({ ...avanzar, ahorro })} />
               </Campo>
-              <p className={`chica ${sinRepartir < 0 ? 'negrita' : 'suave'}`} style={sinRepartir < 0 ? { color: '#b1402a' } : undefined}>
+              <p className={`chica ${sinRepartir < 0 ? 'negrita' : 'suave'}`} style={sinRepartir < 0 ? { color: 'var(--alerta)' } : undefined}>
                 {sinRepartir === 0
                   ? 'Repartido completo.'
                   : sinRepartir > 0

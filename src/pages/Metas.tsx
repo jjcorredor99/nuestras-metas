@@ -5,7 +5,7 @@ import { dinero, diasHasta, pct, hoy, fechaLarga, fechaCorta, mesesRestantes } f
 import { Modal, Campo, Segmento, Barra, InputMonto, EmojiPicker, Confeti, useToast } from '../components/ui'
 
 const EMOJIS = ['🇬🇷', '🏠', '🚗', '💍', '🐶', '✈️', '🛋️', '🎓', '🌊', '🎸', '🏝️', '🧳']
-const COLORES = ['#3a7ca5', '#d9634a', '#6b8f4e', '#e0a83a', '#8b6bb1', '#e88a8a']
+const COLORES = ['#4b8fdb', '#f0705f', '#34b98c', '#f0a930', '#8f7bd4', '#ef7fa8']
 
 type Borrador = Omit<Meta, 'id' | 'aportes' | 'fija'> & { id?: string; fija?: boolean }
 
@@ -15,7 +15,7 @@ const nueva = (): Borrador => ({
   emoji: '🏠',
   fecha: `${new Date().getFullYear() + 1}-12-31`,
   montoObjetivo: 0,
-  color: '#d9634a',
+  color: '#f0705f',
 })
 
 export function Metas() {
@@ -71,7 +71,7 @@ export function Metas() {
         const faltante = Math.max(0, m.montoObjetivo - ahorrado)
         const porMes = meses > 0 ? faltante / meses : faltante
         return (
-          <div className="tarjeta" key={m.id} style={{ background: `linear-gradient(160deg, ${m.color}, ${m.color}cc)`, color: '#fff', borderColor: 'transparent' }}>
+          <div className="tarjeta color" key={m.id} style={{ background: `linear-gradient(150deg, ${m.color}, ${m.color}c4)`, color: '#fff' }}>
             <div className="fila entre">
               <div className="fila">
                 <span style={{ fontSize: '2rem' }}>{m.emoji}</span>
@@ -145,7 +145,7 @@ export function Metas() {
             <Campo label="Color">
               <div className="emojis">
                 {COLORES.map((c) => (
-                  <button key={c} type="button" className={editando.color === c ? 'activo' : ''} style={{ background: c, borderColor: editando.color === c ? '#2b2420' : 'transparent' }} onClick={() => setEditando({ ...editando, color: c })} aria-label={c} />
+                  <button key={c} type="button" className={editando.color === c ? 'activo' : ''} style={{ background: c, borderColor: 'transparent', boxShadow: editando.color === c ? 'inset 3px 3px 7px rgba(0,0,0,.25), 0 0 0 3px rgba(51,60,78,.55)' : 'var(--bajo)' }} onClick={() => setEditando({ ...editando, color: c })} aria-label={c} />
                 ))}
               </div>
             </Campo>

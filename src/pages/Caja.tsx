@@ -74,7 +74,7 @@ function FilaReparto({
         </div>
         <div className="mini suave">{detalle}</div>
       </div>
-      <div className="monto" style={plan < 0 ? { color: '#b1402a' } : undefined}>
+      <div className="monto" style={plan < 0 ? { color: 'var(--alerta)' } : undefined}>
         − {dinero(plan, moneda)}
       </div>
     </div>
@@ -92,7 +92,7 @@ function FilaBolsillo({ v, moneda, sufijo, onClick }: { v: VistaBolsillo; moneda
             {v.bolsillo.acumula ? '· guarda' : '· se reinicia'}
           </span>
         </span>
-        <span className="monto" style={v.disponible < 0 ? { color: '#b1402a' } : undefined}>
+        <span className="monto" style={v.disponible < 0 ? { color: 'var(--alerta)' } : undefined}>
           {dinero(v.disponible, moneda)}
         </span>
       </div>
@@ -216,7 +216,7 @@ export function Caja() {
         <select
           value={mes}
           onChange={(e) => setMes(e.target.value)}
-          style={{ border: '1px solid var(--linea)', borderRadius: 12, padding: '8px 10px', background: '#fff' }}
+          className="select-mes"
         >
           {meses.map((m) => (
             <option key={m} value={m}>
@@ -532,7 +532,7 @@ export function Caja() {
                 <div className="fila entre">
                   <div>
                     <div className="etiqueta">Disponible · {nombreMes(mes)}</div>
-                    <div className="cifra" style={v.disponible < 0 ? { color: '#b1402a' } : undefined}>
+                    <div className="cifra" style={v.disponible < 0 ? { color: 'var(--alerta)' } : undefined}>
                       {dinero(v.disponible, perfil.moneda)}
                     </div>
                   </div>

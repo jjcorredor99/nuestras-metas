@@ -13,17 +13,18 @@ import { Metas } from './pages/Metas'
 import { Muro } from './pages/Muro'
 import { Ajustes } from './pages/Ajustes'
 import { Caja } from './pages/Caja'
+import { Icono } from './components/iconos'
 
 const PAGINAS = [
-  { id: 'inicio', texto: 'Inicio', ico: '🏡' },
-  { id: 'caja', texto: 'Caja', ico: '💰' },
-  { id: 'gastos', texto: 'Gastos', ico: '🧾' },
-  { id: 'facturas', texto: 'Facturas', ico: '📬' },
-  { id: 'deudas', texto: 'Deudas', ico: '⛰️' },
-  { id: 'retos', texto: 'Retos', ico: '🔥' },
-  { id: 'metas', texto: 'Hitos', ico: '🇬🇷' },
-  { id: 'muro', texto: 'Muro', ico: '📸' },
-  { id: 'ajustes', texto: 'Ajustes', ico: '⚙️' },
+  { id: 'inicio', texto: 'Inicio' },
+  { id: 'caja', texto: 'Caja' },
+  { id: 'gastos', texto: 'Gastos' },
+  { id: 'facturas', texto: 'Facturas' },
+  { id: 'deudas', texto: 'Deudas' },
+  { id: 'retos', texto: 'Retos' },
+  { id: 'metas', texto: 'Hitos' },
+  { id: 'muro', texto: 'Muro' },
+  { id: 'ajustes', texto: 'Ajustes' },
 ] as const
 
 type Pagina = (typeof PAGINAS)[number]['id']
@@ -58,14 +59,20 @@ function Shell() {
   return (
     <div className="app">
       <nav className="nav">
-        <div className="marca">Nuestras Metas</div>
+        <div className="marca">
+          <span className="marca-punto" aria-hidden />
+          Nuestras Metas
+        </div>
         {PAGINAS.map((p) => (
           <button
             key={p.id}
             className={`${pagina === p.id ? 'activo' : ''} ${p.id === 'ajustes' || p.id === 'muro' ? 'solo-escritorio' : ''}`}
             onClick={() => ir(p.id)}
+            aria-current={pagina === p.id ? 'page' : undefined}
           >
-            <span className="ico">{p.ico}</span>
+            <span className="ico">
+              <Icono nombre={p.id} />
+            </span>
             <span>{p.texto}</span>
           </button>
         ))}

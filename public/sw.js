@@ -1,5 +1,5 @@
 // Cache "primero red, si falla caché" para que la app abra sin conexión.
-const CACHE = 'nuestras-metas-v1'
+const CACHE = 'nuestras-metas-v2'
 self.addEventListener('install', (e) => {
   self.skipWaiting()
 })

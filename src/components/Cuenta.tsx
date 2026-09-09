@@ -52,7 +52,7 @@ export function Cuenta({ soloUnirse = false }: { soloUnirse?: boolean }) {
             placeholder={modo === 'crear' ? 'Mínimo 6 caracteres' : ''}
           />
         </Campo>
-        {msg && <p className="chica" style={{ color: '#b1402a' }}>{msg}</p>}
+        {msg && <p className="chica" style={{ color: 'var(--alerta)' }}>{msg}</p>}
         <button
           className="btn"
           disabled={ocupado || !email.includes('@') || pass.length < 6}
@@ -96,7 +96,7 @@ export function Cuenta({ soloUnirse = false }: { soloUnirse?: boolean }) {
             </button>
           </div>
         </div>
-        {msg && <p className="chica" style={{ color: '#b1402a' }}>{msg}</p>}
+        {msg && <p className="chica" style={{ color: 'var(--alerta)' }}>{msg}</p>}
         <button className="btn fantasma chico" onClick={() => sync.salir()}>
           Cerrar sesión
         </button>
@@ -123,7 +123,7 @@ export function Cuenta({ soloUnirse = false }: { soloUnirse?: boolean }) {
         </div>
         <p className="mini suave">Compártelo con la otra persona. Solo cabe una más.</p>
       </div>
-      {sync.error && <p className="chica" style={{ color: '#b1402a' }}>{sync.error}</p>}
+      {sync.error && <p className="chica" style={{ color: 'var(--alerta)' }}>{sync.error}</p>}
       {sync.ultimaSync && (
         <p className="mini suave">
           Última sincronización: {new Date(sync.ultimaSync).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}

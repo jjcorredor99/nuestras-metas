@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { Campo } from '../components/ui'
 import { Cuenta } from '../components/Cuenta'
+import { Marca } from '../components/iconos'
 import { useSync } from '../sync'
 
 export function Onboarding() {
@@ -33,7 +34,7 @@ export function Onboarding() {
 
   return (
     <div className="bienvenida">
-      <div className="corazon">🤍</div>
+      <div className="corazon"><Marca /></div>
       <h1 className="centrado">Nuestras Metas</h1>
       <p className="centrado suave">
         Un lugar para los gastos, las facturas, las deudas que vamos a tumbar y los retos que

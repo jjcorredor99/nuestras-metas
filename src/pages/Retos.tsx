@@ -127,7 +127,7 @@ export function Retos() {
             </div>
             {r.descripcion && <p className="chica suave mt">{r.descripcion}</p>}
             <div className="fila entre chica mt">
-              <span className="negrita" style={pasado ? { color: '#b1402a' } : undefined}>
+              <span className="negrita" style={pasado ? { color: 'var(--alerta)' } : undefined}>
                 {unidad(r)}
               </span>
               <span className="suave">{r.tipo === 'limite' ? `${avance}% del tope` : `${avance}%`}</span>
@@ -164,7 +164,7 @@ export function Retos() {
           <h3 className="mb">Cumplidos 🏅</h3>
           {hechos.map((r) => (
             <div className="item" key={r.id}>
-              <div className="icono" style={{ background: '#fff' }}>{r.emoji}</div>
+              <div className="icono" style={{ background: 'var(--sup)' }}>{r.emoji}</div>
               <div className="cuerpo">
                 <div className="titulo">{r.titulo}</div>
                 <div className="chica suave">{r.completadoEn ? `el ${fechaCorta(r.completadoEn)}` : ''}{r.recompensa && ` · ganamos: ${r.recompensa}`}</div>

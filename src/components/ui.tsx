@@ -87,6 +87,31 @@ export function Barra({
   )
 }
 
+/**
+ * El pulso de la semana: una barrita por día con lo que salió.
+ * La más alta se pinta con el color de la casa para que el ojo la encuentre sola.
+ */
+export function Pulso({ dias }: { dias: { letra: string; valor: number }[] }) {
+  const max = Math.max(...dias.map((d) => d.valor), 1)
+  return (
+    <div className="pulso" aria-hidden>
+      {dias.map((d, i) => (
+        <div key={i} className={`dia ${d.valor > 0 && d.valor === max ? 'pico' : ''}`}>
+          <div className="tallo">
+            <i
+              style={{
+                height: `${d.valor > 0 ? Math.max((d.valor / max) * 100, 14) : 5}%`,
+                animationDelay: `${0.12 + i * 0.05}s`,
+              }}
+            />
+          </div>
+          <span className="letra">{d.letra}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Vacio({ emoji, texto, hijo }: { emoji: string; texto: string; hijo?: ReactNode }) {
   return (
     <div className="vacio">
@@ -117,7 +142,7 @@ export function EmojiPicker({
   )
 }
 
-const COLORES = ['#d9634a', '#6b8f4e', '#e0a83a', '#3a7ca5', '#e88a8a', '#8b6bb1']
+const COLORES = ['#f0705f', '#34b98c', '#f0a930', '#4b8fdb', '#ef7fa8', '#8f7bd4']
 
 export function Confeti({ activo }: { activo: boolean }) {
   const [piezas, setPiezas] = useState<{ x: number; c: string; d: number; r: number }[]>([])

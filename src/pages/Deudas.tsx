@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useStore, saldoDeuda, nombreDe } from '../store'
 import type { Deuda, Persona } from '../types'
-import { dinero, hoy, sumar, pct, fechaCorta } from '../format'
+import { dinero, hoy, sumar, pct, fechaCorta, mesActual, nombreMes, sumarMeses } from '../format'
+import { avanceAvanzar, mesesParaLibres, minimosMensuales } from '../caja'
 import { Modal, Campo, Segmento, Barra, Vacio, InputMonto, Confeti, useToast } from '../components/ui'
 
 type Borrador = {
@@ -26,7 +27,10 @@ export function Deudas() {
   const inicial = sumar(deudas.map((d) => d.montoInicial))
   const actual = sumar(deudas.map(saldoDeuda))
   const pagado = inicial - actual
-  const minimos = sumar(deudas.filter((d) => saldoDeuda(d) > 0).map((d) => d.pagoMinimo))
+  const minimos = minimosMensuales(deudas)
+  const mes = mesActual()
+  const equipo = useMemo(() => avanceAvanzar(estado, mes), [estado, mes])
+  const mesesLibres = mesesParaLibres(deudas, equipo.metaDeudas)
 
   // Bola de nieve: la más chica primero. Se siente el avance y motiva.
   const orden = useMemo(
@@ -80,6 +84,34 @@ export function Deudas() {
           <p className="sub">Las vamos a tumbar una por una.</p>
         </div>
       </div>
+
+      {perfil.plan && equipo.metaDeudas > 0 && actual > 0 && (
+        <div className="tarjeta oliva">
+          <div className="fila entre">
+            <span className="etiqueta">En equipo · {nombreMes(mes).split(' ')[0]}</span>
+            <span className="chip oliva">{pct(equipo.abonos, equipo.metaDeudas)}%</span>
+          </div>
+          <div className="cifra">
+            {dinero(equipo.abonos, perfil.moneda)} <span className="chica suave">de {dinero(equipo.metaDeudas, perfil.moneda)}</span>
+          </div>
+          <div className="mt">
+            <Barra valor={pct(equipo.abonos, equipo.metaDeudas)} color="oliva" />
+          </div>
+          <p className="chica" style={{ marginTop: 6 }}>
+            {perfil.nombreA}: <b>{dinero(equipo.abonosPor.a, perfil.moneda)}</b> · {perfil.nombreB}:{' '}
+            <b>{dinero(equipo.abonosPor.b, perfil.moneda)}</b>
+            {equipo.abonos < equipo.metaDeudas
+              ? ` · faltan ${dinero(equipo.metaDeudas - equipo.abonos, perfil.moneda)}`
+              : ' · ¡meta del mes cumplida! 🎉'}
+          </p>
+          {mesesLibres !== null && mesesLibres > 0 && (
+            <p className="mini suave" style={{ marginTop: 4 }}>
+              A este ritmo, libres de deudas en ~{mesesLibres} {mesesLibres === 1 ? 'mes' : 'meses'} (
+              {nombreMes(sumarMeses(mes, mesesLibres))}) · sin contar intereses.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="tarjeta">
         <div className="fila entre">

@@ -148,8 +148,39 @@ La Caja responde la pregunta que da disciplina: *¿cuánto nos queda de verdad e
 - La primera vez, "Armar mi caja" propone bolsillos con porcentajes sugeridos; se editan
   antes de crear. Toda la matemática vive en `src/caja.ts`, con pruebas en `src/caja.test.ts`.
 
+### Tres cajas, una regla, un número
+
+La caja está armada para una regla: **la casa vive con un solo sueldo** y el otro se va entero a
+deudas y a Grecia. Todo lo que entra baja en cascada por tres cajas:
+
+```
+Entra                        20.0M   (lo esperado de los dos)
+─ 📤 Obligaciones fuera       6.0M   sale primero (lo que cada uno manda a su familia, etc.)
+─ 🏠 Vivir                   10.0M   ← UN SUELDO (el menor de los dos, o el que elijan)
+─ 💪 Avanzar                  4.0M   = lo que sobra → deudas · Grecia y ahorro
+```
+
+- **Obligaciones fuera de casa**: un bolsillo 📤 por persona con la categoría "Fuera de casa". Un gasto
+  con esa categoría cae en el bolsillo de quien lo pagó y nunca en el comodín: no es plata para vivir.
+  Los giros del banco llegan como "Otros"; con la primera corrección la app se acuerda del destinatario.
+- **Vivir**: los bolsillos de la casa y los de cada uno. Las plantillas se reparten sobre el sueldo con el
+  que se vive (no sobre el ingreso total) y suman el 80%; el resto queda de colchón, pero también cuenta.
+- **Avanzar**: no son bolsillos, son las deudas y los hitos. El plan fija cuánto va a deudas y cuánto a
+  Grecia cada mes (`perfil.plan.avanzar`); lo real son los abonos y aportes del mes, y se ven por persona.
+
+La tarjeta de arriba responde *¿vamos viviendo con un sueldo?*: **gastado para vivir** (todo gasto del mes
+que no sea una obligación fuera de casa, con o sin bolsillo) contra el sueldo. Amarillo desde el 80%, rojo
+al pasarse. En Deudas, la tarjeta **En equipo** compara el ataque del mes con lo abonado entre los dos y
+proyecta *libres de deudas en N meses* = `saldo total / ataque mensual`, sin contar intereses.
+
+"Armar mi caja" tiene cuatro pasos: cuánto entra, obligaciones fuera de casa, con qué sueldo se vive (y los
+bolsillos propuestos), y cómo repartir lo que sobra. Si ya tenían bolsillos de antes, la Caja ofrece
+**Completar el plan**: los mismos pasos sin tocar los bolsillos que ya existen. La matemática está en
+`src/caja.ts` (`vistaUnSueldo`, `reparto`, `avanceAvanzar`, `mesesParaLibres`) con pruebas en `src/caja.test.ts`.
+
 Al publicar esta versión: abran la app en los dos celulares (cerrar y volver a abrir) antes
-de armar la caja, para que ninguno siga con la versión anterior.
+de armar la caja, para que ninguno siga con la versión anterior (un celular sin actualizar muestra
+"Fuera de casa" como Otros).
 
 ## Estructura
 

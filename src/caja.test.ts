@@ -1,17 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import type { Bolsillo, Categoria, Estado, Gasto } from './types'
-import { mesAnterior, mesesEntre } from './format'
+import { mesAnterior, mesesEntre, sumarMeses } from './format'
+import { CATEGORIAS } from './categorias'
 import {
   PLANTILLAS,
   alertasBolsillos,
+  avanceAvanzar,
   bolsilloDe,
+  bolsillosFueraDeCasa,
+  cajaDe,
   comparacion,
   disponible,
   fraseComparacion,
+  mesesParaLibres,
+  minimosMensuales,
   montoSugerido,
   quitarCategorias,
+  reparto,
   resumenMes,
+  sueldoParaVivir,
+  sugerirAvanzar,
   vistaBolsillo,
+  vistaUnSueldo,
 } from './caja'
 
 // ---------- armado rápido ----------
@@ -59,6 +69,20 @@ const mercado = bolsillo({ id: 'mercado', categorias: ['mercado', 'hogar'] })
 const salidas = bolsillo({ id: 'salidas', categorias: ['comida', 'diversion'] })
 const resto = bolsillo({ id: 'resto' }) // comodín del hogar
 const antojosA = bolsillo({ id: 'antojosA', ambito: 'a' })
+const fueraA = bolsillo({ id: 'fueraA', ambito: 'a', categorias: ['fuera'], asignacion: 3000000 })
+const fueraB = bolsillo({ id: 'fueraB', ambito: 'b', categorias: ['fuera'], asignacion: 3000000 })
+
+/** Juan 10M, Luisa 10M; 3M cada uno fuera de casa; sobran 4M: 3M a deudas y 1M a Grecia. */
+const conPlan = (extra: Partial<Estado> = {}): Estado =>
+  estadoCon({
+    perfil: {
+      ...base().perfil,
+      ingresoEsperado: { a: 10000000, b: 10000000 },
+      plan: { sueldoVivir: 'menor', avanzar: { deudas: 3000000, ahorro: 1000000 } },
+    },
+    bolsillos: [mercado, salidas, resto, antojosA, fueraA, fueraB],
+    ...extra,
+  })
 
 // ---------- meses ----------
 
@@ -265,14 +289,145 @@ describe('comparacion', () => {
 // ---------- plantillas ----------
 
 describe('plantillas', () => {
-  it('las del hogar cubren las 11 categorías exactamente una vez', () => {
+  it('las del hogar cubren todas las categorías de vivir exactamente una vez', () => {
     const todas = PLANTILLAS.filter((p) => p.ambito === 'hogar').flatMap((p) => p.categorias)
-    const esperadas: Categoria[] = ['mercado', 'comida', 'transporte', 'hogar', 'servicios', 'salud', 'diversion', 'ropa', 'regalos', 'viajes', 'otros']
+    const esperadas: Categoria[] = CATEGORIAS.map((c) => c.id).filter((c) => c !== 'fuera')
     expect([...todas].sort()).toEqual([...esperadas].sort())
   })
-  it('monto sugerido: redondea a miles y usa el ingreso correcto', () => {
-    const ingresos = { a: 4000000, b: 3333333 }
-    expect(montoSugerido(PLANTILLAS[0], ingresos)).toBe(2200000) // 30% de 7.333.333
-    expect(montoSugerido(PLANTILLAS[6], ingresos)).toBe(167000) // 5% de lo de b
+  it('monto sugerido: redondea a miles sobre el sueldo con el que se vive', () => {
+    expect(montoSugerido(PLANTILLAS[0], 3333333)).toBe(1000000) // 30%
+    expect(montoSugerido(PLANTILLAS[6], 3333333)).toBe(167000) // 5%
+  })
+  it('bolsillos fuera de casa: uno por persona con monto', () => {
+    const lista = bolsillosFueraDeCasa({ a: 3000000, b: 0 }, '2026-09')
+    expect(lista).toHaveLength(1)
+    expect(lista[0]).toMatchObject({ ambito: 'a', asignacion: 3000000, categorias: ['fuera'], acumula: false, desde: '2026-09' })
+  })
+})
+
+// ---------- las tres cajas ----------
+
+describe('obligaciones fuera de casa', () => {
+  it('un gasto fuera personal cae en el bolsillo de obligaciones de quien pagó', () => {
+    const g = gasto({ monto: 3000000, categoria: 'fuera', compartido: false, pagadoPor: 'a' })
+    expect(bolsilloDe(g, [resto, antojosA, fueraA])?.id).toBe('fueraA')
+  })
+  it('sin bolsillo de obligaciones, nunca cae al comodín', () => {
+    const g = gasto({ monto: 3000000, categoria: 'fuera', compartido: false, pagadoPor: 'b' })
+    expect(bolsilloDe(g, [resto, antojosA, fueraA])).toBeNull()
+    const compartido = gasto({ monto: 500000, categoria: 'fuera' })
+    expect(bolsilloDe(compartido, [resto, fueraA, fueraB])).toBeNull()
+  })
+  it('cajaDe: por categoría, por bolsillo elegido a mano, y vivir para lo demás', () => {
+    const bolsillos = [mercado, resto, fueraA]
+    expect(cajaDe(gasto({ monto: 1, categoria: 'fuera' }), bolsillos)).toBe('fuera')
+    expect(cajaDe(gasto({ monto: 1, categoria: 'comida', compartido: false, bolsilloId: 'fueraA' }), bolsillos)).toBe('fuera')
+    expect(cajaDe(gasto({ monto: 1, categoria: 'comida' }), bolsillos)).toBe('vivir')
+  })
+})
+
+describe('alertas', () => {
+  it('una obligación cumplida completa no avisa; pasada, sí', () => {
+    const exacta = conPlan({ gastos: [gasto({ monto: 3000000, categoria: 'fuera', compartido: false, pagadoPor: 'a' })] })
+    expect(alertasBolsillos(exacta, '2026-09').map((v) => v.bolsillo.id)).toEqual([])
+    const pasada = conPlan({ gastos: [gasto({ monto: 3500000, categoria: 'fuera', compartido: false, pagadoPor: 'a' })] })
+    expect(alertasBolsillos(pasada, '2026-09').map((v) => v.bolsillo.id)).toEqual(['fueraA'])
+  })
+})
+
+describe('vivir con un sueldo', () => {
+  it('el sueldo menor, uno explícito, uno en cero, ninguno', () => {
+    const perfil = base().perfil
+    expect(sueldoParaVivir({ ...perfil, ingresoEsperado: { a: 10000000, b: 8000000 } })).toEqual({ persona: 'b', monto: 8000000 })
+    expect(sueldoParaVivir({ ...perfil, ingresoEsperado: { a: 10000000, b: 8000000 }, plan: { sueldoVivir: 'a', avanzar: { deudas: 0, ahorro: 0 } } })).toEqual({ persona: 'a', monto: 10000000 })
+    expect(sueldoParaVivir({ ...perfil, ingresoEsperado: { a: 0, b: 8000000 } })).toEqual({ persona: 'b', monto: 8000000 })
+    expect(sueldoParaVivir(perfil)).toEqual({ persona: null, monto: 0 })
+  })
+  it('cuenta todo lo que no sea fuera de casa, con o sin bolsillo, solo del mes', () => {
+    const e = conPlan({
+      gastos: [
+        gasto({ monto: 3000000, categoria: 'fuera', compartido: false, pagadoPor: 'a' }),
+        gasto({ monto: 500000, categoria: 'fuera' }), // compartido, sin bolsillo, igual es fuera
+        gasto({ monto: 6000000, categoria: 'mercado' }),
+        gasto({ monto: 400000, categoria: 'ropa', compartido: false, pagadoPor: 'b' }), // sin bolsillo de b: vivir
+        gasto({ monto: 999999, categoria: 'mercado', fecha: '2026-08-20' }),
+      ],
+    })
+    const v = vistaUnSueldo(e, '2026-09')
+    expect(v.persona).toBe('a')
+    expect(v.tope).toBe(10000000)
+    expect(v.gastado).toBe(6400000)
+    expect(v.disponible).toBe(3600000)
+    expect(v.estado).toBe('bien')
+  })
+  it('semáforo: amarillo desde el 80%, rojo al pasarse', () => {
+    const amarillo = vistaUnSueldo(conPlan({ gastos: [gasto({ monto: 8500000 })] }), '2026-09')
+    expect(amarillo.estado).toBe('amarillo')
+    const rojo = vistaUnSueldo(conPlan({ gastos: [gasto({ monto: 10500000 })] }), '2026-09')
+    expect(rojo.estado).toBe('rojo')
+    expect(rojo.avance).toBe(100)
+    const vacio = vistaUnSueldo(base(), '2026-09')
+    expect(vacio).toMatchObject({ tope: 0, avance: 0, estado: 'bien' })
+  })
+})
+
+describe('reparto del mes', () => {
+  it('entra 20 → fuera 6 → vivir 10 → avanzar 4', () => {
+    const r = reparto(
+      conPlan({
+        gastos: [gasto({ monto: 3000000, categoria: 'fuera', compartido: false, pagadoPor: 'a' }), gasto({ monto: 2000000 })],
+        deudas: [{ id: 'd', nombre: 'TC', de: 'a', montoInicial: 5000000, tasaMensual: 2, pagoMinimo: 300000, creadaEn: '2026-01-01', abonos: [{ id: 'x', fecha: '2026-09-05', monto: 1000000, por: 'b' }] }],
+      }),
+      '2026-09',
+    )
+    expect(r.entra).toBe(20000000)
+    expect(r.fuera.plan).toBe(6000000)
+    expect(r.fuera.real).toBe(3000000)
+    expect(r.fuera.porPersona.a).toEqual({ plan: 3000000, real: 3000000 })
+    expect(r.fuera.porPersona.b).toEqual({ plan: 3000000, real: 0 })
+    expect(r.vivir.tope).toBe(10000000)
+    expect(r.vivir.asignado).toBe(400000) // mercado, salidas, resto, antojosA a 100k
+    expect(r.vivir.colchon).toBe(9600000)
+    expect(r.vivir.gastado).toBe(2000000)
+    expect(r.avanzar).toEqual({ plan: 4000000, deudas: 3000000, ahorro: 1000000, real: 1000000, sinRepartir: 0 })
+  })
+  it('no cierra cuando obligaciones + un sueldo superan lo que entra', () => {
+    const e = conPlan({ perfil: { ...base().perfil, ingresoEsperado: { a: 2000000, b: 5000000 } } })
+    expect(reparto(e, '2026-09').avanzar.plan).toBe(-1000000)
+  })
+})
+
+describe('avanzar en equipo', () => {
+  const deudas: Estado['deudas'] = [
+    { id: 'd1', nombre: 'TC Juan', de: 'a', montoInicial: 4000000, tasaMensual: 2, pagoMinimo: 200000, creadaEn: '2026-01-01', abonos: [{ id: 'x', fecha: '2026-09-05', monto: 1500000, por: 'a' }, { id: 'y', fecha: '2026-08-05', monto: 500000, por: 'a' }] },
+    { id: 'd2', nombre: 'Crédito', de: 'b', montoInicial: 5000000, tasaMensual: 1.5, pagoMinimo: 400000, creadaEn: '2026-01-01', abonos: [{ id: 'z', fecha: '2026-09-07', monto: 900000, por: 'b' }] },
+    { id: 'd3', nombre: 'Pagada', de: 'ambos', montoInicial: 100000, tasaMensual: 0, pagoMinimo: 50000, creadaEn: '2026-01-01', abonos: [{ id: 'w', fecha: '2026-07-01', monto: 100000, por: 'a' }] },
+  ]
+  it('abonos y aportes del mes, por persona', () => {
+    const e = conPlan({
+      deudas,
+      metas: [
+        { id: 'm', titulo: 'Grecia', descripcion: '', emoji: '🇬🇷', fecha: '2027-06-01', montoObjetivo: 30000000, color: '', fija: true, aportes: [{ id: 'a1', fecha: '2026-09-02', monto: 600000, por: 'b' }, { id: 'a2', fecha: '2026-08-02', monto: 600000, por: 'b' }] },
+      ],
+    })
+    const av = avanceAvanzar(e, '2026-09')
+    expect(av).toEqual({ metaDeudas: 3000000, abonos: 2400000, abonosPor: { a: 1500000, b: 900000 }, metaAhorro: 1000000, aportes: 600000, aportesPor: { a: 0, b: 600000 } })
+  })
+  it('mínimos solo de las que aún deben', () => {
+    expect(minimosMensuales(deudas)).toBe(600000)
+  })
+  it('meses para quedar libres, sin intereses', () => {
+    // saldo: 4M − 2M + 5M − 0.9M = 6.1M
+    expect(mesesParaLibres(deudas, 3000000)).toBe(3)
+    expect(mesesParaLibres(deudas, 0)).toBeNull()
+    expect(mesesParaLibres([deudas[2]], 0)).toBe(0)
+    expect(sumarMeses('2026-11', 3)).toBe('2027-02')
+    expect(sumarMeses('2026-09', 14)).toBe('2027-11')
+  })
+  it('sugerencia: tres cuartos a deudas, nunca menos que los mínimos, nunca más que lo que sobra', () => {
+    expect(sugerirAvanzar(4000000, 600000)).toEqual({ deudas: 3000000, ahorro: 1000000 })
+    expect(sugerirAvanzar(4000000, 3500000)).toEqual({ deudas: 3500000, ahorro: 500000 })
+    expect(sugerirAvanzar(1000000, 2000000)).toEqual({ deudas: 1000000, ahorro: 0 })
+    expect(sugerirAvanzar(0, 600000)).toEqual({ deudas: 0, ahorro: 0 })
   })
 })

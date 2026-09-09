@@ -11,6 +11,7 @@ export const CATEGORIAS: { id: Categoria; nombre: string; emoji: string }[] = [
   { id: 'ropa', nombre: 'Ropa', emoji: '👗' },
   { id: 'regalos', nombre: 'Regalos', emoji: '🎁' },
   { id: 'viajes', nombre: 'Viajes', emoji: '✈️' },
+  { id: 'fuera', nombre: 'Fuera de casa', emoji: '📤' },
   { id: 'otros', nombre: 'Otros', emoji: '📦' },
 ]
 

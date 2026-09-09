@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useStore, nombreDe } from '../store'
 import type { Ambito, Bolsillo } from '../types'
 import { dinero, hoy, mesActual, nombreMes, fechaCorta, pct } from '../format'
@@ -6,9 +6,21 @@ import { CATEGORIAS, catInfo } from '../categorias'
 import { Modal, Campo, Segmento, Barra, Vacio, InputMonto, EmojiPicker, useToast } from '../components/ui'
 import { IngresoModal, fuenteInfo, type BorradorIngreso } from '../components/IngresoModal'
 import { ArmarCaja } from '../components/ArmarCaja'
-import { resumenMes, vistaBolsillo, vigentes, gastosDe, sinBolsillo, disponible, type VistaBolsillo } from '../caja'
+import {
+  resumenMes,
+  vistaBolsillo,
+  vigentes,
+  gastosDe,
+  sinBolsillo,
+  disponible,
+  esFueraDeCasa,
+  vistaUnSueldo,
+  reparto,
+  avanceAvanzar,
+  type VistaBolsillo,
+} from '../caja'
 
-const EMOJIS = ['🛒', '🍕', '🚕', '💡', '📦', '🍦', '🏠', '💊', '🎬', '👗', '🎁', '✈️', '☕', '🐶', '💰', '🎯']
+const EMOJIS = ['🛒', '🍕', '🚕', '💡', '📦', '🍦', '📤', '🏠', '💊', '🎬', '👗', '🎁', '✈️', '☕', '🐶', '💰', '🎯']
 
 type BorradorBolsillo = Omit<Bolsillo, 'id' | 'ajustes'> & { id?: string }
 
@@ -26,11 +38,84 @@ const nuevoBolsillo = (ambito: Ambito): BorradorBolsillo => ({
 const colorBarra = (v: VistaBolsillo): 'oliva' | 'mostaza' | '' =>
   v.estado === 'rojo' ? '' : v.estado === 'amarillo' ? 'mostaza' : 'oliva'
 
+type Seccion = 'fuera' | 'vivir' | 'avanzar'
+
+function Cabecera({ titulo, resumen, abierta, onToggle }: { titulo: string; resumen: string; abierta: boolean; onToggle: () => void }) {
+  return (
+    <div className="fila entre" onClick={onToggle} style={{ cursor: 'pointer' }} role="button" aria-expanded={abierta}>
+      <h3>{titulo}</h3>
+      <span className="chica suave">
+        {resumen} {abierta ? '▾' : '▸'}
+      </span>
+    </div>
+  )
+}
+
+function FilaReparto({
+  emoji,
+  titulo,
+  plan,
+  detalle,
+  onClick,
+  moneda,
+}: {
+  emoji: string
+  titulo: string
+  plan: number
+  detalle: string
+  onClick: () => void
+  moneda: string
+}) {
+  return (
+    <div className="item" onClick={onClick} style={{ cursor: 'pointer', paddingLeft: 0, paddingRight: 0 }}>
+      <div className="cuerpo">
+        <div className="titulo">
+          {emoji} {titulo}
+        </div>
+        <div className="mini suave">{detalle}</div>
+      </div>
+      <div className="monto" style={plan < 0 ? { color: '#b1402a' } : undefined}>
+        − {dinero(plan, moneda)}
+      </div>
+    </div>
+  )
+}
+
+function FilaBolsillo({ v, moneda, sufijo, onClick }: { v: VistaBolsillo; moneda: string; sufijo?: string; onClick: () => void }) {
+  return (
+    <div className="item" onClick={onClick} style={{ cursor: 'pointer', display: 'block' }}>
+      <div className="fila entre">
+        <span className="negrita">
+          {v.bolsillo.emoji} {v.bolsillo.nombre}
+          {sufijo && <span className="suave"> · {sufijo}</span>}{' '}
+          <span className="mini suave" style={{ fontWeight: 600 }}>
+            {v.bolsillo.acumula ? '· guarda' : '· se reinicia'}
+          </span>
+        </span>
+        <span className="monto" style={v.disponible < 0 ? { color: '#b1402a' } : undefined}>
+          {dinero(v.disponible, moneda)}
+        </span>
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <Barra valor={v.avance} color={colorBarra(v)} />
+      </div>
+      <div className="mini suave" style={{ marginTop: 4 }}>
+        gastado {dinero(v.gastado, moneda)} de {dinero(v.tope, moneda)}
+        {v.estado === 'rojo' && ' · en rojo'}
+        {v.estado === 'amarillo' && ' · casi'}
+      </div>
+    </div>
+  )
+}
+
 export function Caja() {
   const { estado, dispatch } = useStore()
   const { perfil, gastos, ingresos, bolsillos } = estado
   const [mes, setMes] = useState(mesActual())
-  const [armando, setArmando] = useState(false)
+  const [armando, setArmando] = useState<'completo' | 'plan' | null>(null)
+  const [abierta, setAbierta] = useState<Seccion | null>('vivir')
+  const [verIngresos, setVerIngresos] = useState(false)
+  const refs = { fuera: useRef<HTMLDivElement>(null), vivir: useRef<HTMLDivElement>(null), avanzar: useRef<HTMLDivElement>(null) }
   const [editando, setEditando] = useState<BorradorBolsillo | null>(null)
   const [detalle, setDetalle] = useState<string | null>(null)
   const [ajustando, setAjustando] = useState<{ id: string; modo: 'meter' | 'sacar'; monto: number; nota: string } | null>(null)
@@ -46,6 +131,28 @@ export function Caja() {
   }, [gastos, ingresos])
 
   const r = useMemo(() => resumenMes(estado, mes), [estado, mes])
+  const hayPlan = !!perfil.plan
+  const un = useMemo(() => vistaUnSueldo(estado, mes), [estado, mes])
+  const rep = useMemo(() => reparto(estado, mes), [estado, mes])
+  const av = useMemo(() => avanceAvanzar(estado, mes), [estado, mes])
+  const vistasFuera = useMemo(
+    () => vigentes(estado, mes).filter(esFueraDeCasa).map((b) => vistaBolsillo(b, estado, mes)),
+    [estado, mes],
+  )
+  const sinFuera = useMemo(() => {
+    const lista = gastos.filter((g) => g.fecha.startsWith(mes) && g.categoria === 'fuera' && !vistasFuera.some((v) => gastosDe(v.bolsillo, gastos, bolsillos, mes).includes(g)))
+    return { n: lista.length, monto: lista.reduce((acc, g) => acc + g.monto, 0) }
+  }, [gastos, bolsillos, mes, vistasFuera])
+
+  const abrir = (sec: Seccion) => {
+    setAbierta(sec)
+    setTimeout(() => refs[sec].current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+  const irA = (pagina: string) => {
+    location.hash = pagina
+    window.scrollTo({ top: 0 })
+  }
+
   const secciones = useMemo(() => {
     const lista: { ambito: Ambito; titulo: string; vistas: VistaBolsillo[]; sin: { n: number; monto: number } }[] = [
       { ambito: 'hogar', titulo: 'De la casa', vistas: [], sin: { n: 0, monto: 0 } },
@@ -54,7 +161,7 @@ export function Caja() {
     ]
     for (const s of lista) {
       s.vistas = vigentes(estado, mes)
-        .filter((b) => b.ambito === s.ambito)
+        .filter((b) => b.ambito === s.ambito && !esFueraDeCasa(b))
         .map((b) => vistaBolsillo(b, estado, mes))
       s.sin = sinBolsillo(estado, mes, s.ambito)
     }
@@ -122,55 +229,101 @@ export function Caja() {
       {bolsillos.length === 0 ? (
         <Vacio
           emoji="💰"
-          texto="Reparte lo que entra en bolsillos y sabrás, cada día, cuánto queda de verdad."
+          texto="Una regla sencilla: la casa vive con un sueldo y el otro tumba deudas. La caja lleva la cuenta."
           hijo={
-            <button className="btn" onClick={() => setArmando(true)}>
+            <button className="btn" onClick={() => setArmando('completo')}>
               Armar mi caja
             </button>
           }
         />
       ) : (
         <>
-          <div className="tarjeta terracota">
-            <span className="etiqueta">Queda · {nombreMes(mes)}</span>
-            <div className="cifra grande">{dinero(r.queda, perfil.moneda)}</div>
-            <p className="chica" style={{ opacity: 0.92, marginTop: 6 }}>
-              Entró {dinero(r.base, perfil.moneda)}
-              {r.usaEsperado && ' (esperado)'} · Salió {dinero(r.salidas, perfil.moneda)}
-            </p>
-            <div className="fila entre" style={{ marginTop: 12 }}>
-              <span className="chica negrita">Libre de verdad</span>
-              <span className="chica negrita">{dinero(r.libre, perfil.moneda)}</span>
+          {hayPlan ? (
+            <div className="tarjeta terracota">
+              <div className="fila entre">
+                <span className="etiqueta">Vivimos con un sueldo · {nombreMes(mes)}</span>
+                <span className="chip" style={{ background: 'rgba(255,255,255,.22)', color: '#fff', whiteSpace: 'nowrap' }}>
+                  {un.estado === 'rojo' ? '🔴 nos pasamos' : un.estado === 'amarillo' ? '🟡 casi' : '🟢 vamos bien'}
+                </span>
+              </div>
+              <div className="cifra grande">{dinero(un.disponible, perfil.moneda)}</div>
+              <p className="chica" style={{ opacity: 0.92, marginTop: 2 }}>
+                {un.disponible >= 0 ? 'quedan' : 'de más'} del sueldo de {un.persona ? nombreDe(perfil, un.persona) : '—'}
+              </p>
+              <div style={{ marginTop: 10 }}>
+                <Barra valor={un.avance} color="blanca" />
+              </div>
+              <p className="mini" style={{ opacity: 0.85, marginTop: 6 }}>
+                Gastado {dinero(un.gastado, perfil.moneda)} de {dinero(un.tope, perfil.moneda)} · queda del mes{' '}
+                {dinero(r.queda, perfil.moneda)} · libre de verdad {dinero(r.libre, perfil.moneda)}
+              </p>
             </div>
-            <div style={{ marginTop: 6 }}>
-              <Barra valor={pct(r.libre, r.base)} color="blanca" />
+          ) : (
+            <div className="tarjeta mostaza clic" onClick={() => setArmando('plan')}>
+              <div className="fila entre">
+                <span className="titulo">💡 Completar el plan</span>
+                <span className="chica suave">Empezar →</span>
+              </div>
+              <p className="chica suave" style={{ marginTop: 4 }}>
+                Falta la regla: con qué sueldo vive la casa, qué sale primero y cuánto va a deudas. Los bolsillos quedan igual.
+              </p>
             </div>
-            <p className="mini" style={{ opacity: 0.85, marginTop: 6 }}>
-              Comprometido {dinero(r.comprometido, perfil.moneda)}: facturas {dinero(r.facturasPendientes, perfil.moneda)} + mínimos de
-              deuda {dinero(r.minimosDeuda, perfil.moneda)}
-            </p>
-          </div>
+          )}
 
           <div className="tarjeta">
             <div className="fila entre">
-              <div>
-                <h3>Plan del mes</h3>
-                <p className="chica suave">
-                  Asignado {dinero(r.asignado, perfil.moneda)} de {dinero(r.ingresosEsperados, perfil.moneda)} esperados
-                </p>
-              </div>
-              <span className={`chip ${r.sinAsignar >= 0 ? 'oliva' : 'terracota'}`}>
-                {r.sinAsignar >= 0
-                  ? `${dinero(r.sinAsignar, perfil.moneda)} sin bolsillo`
-                  : `te pasaste por ${dinero(-r.sinAsignar, perfil.moneda)}`}
-              </span>
+              <h3>Reparto del mes</h3>
+              {hayPlan && (rep.avanzar.plan < 0 || rep.avanzar.sinRepartir !== 0) && (
+                <span className="chip terracota">
+                  {rep.avanzar.plan < 0
+                    ? 'no cierra'
+                    : rep.avanzar.sinRepartir > 0
+                      ? `${dinero(rep.avanzar.sinRepartir, perfil.moneda)} sin repartir`
+                      : `te pasaste por ${dinero(-rep.avanzar.sinRepartir, perfil.moneda)}`}
+                </span>
+              )}
             </div>
-            <div className="fila mt" style={{ gap: 8 }}>
+            <div className="fila entre chica" style={{ marginTop: 10 }}>
+              <span className="negrita">💵 Entra</span>
+              <span className="negrita">{dinero(rep.entra, perfil.moneda)}</span>
+            </div>
+            <FilaReparto
+              emoji="📤"
+              titulo="Obligaciones fuera de casa"
+              plan={rep.fuera.plan}
+              detalle={`salió ${dinero(rep.fuera.real, perfil.moneda)}`}
+              onClick={() => abrir('fuera')}
+              moneda={perfil.moneda}
+            />
+            <FilaReparto
+              emoji="🏠"
+              titulo="Vivir · un sueldo"
+              plan={rep.vivir.tope}
+              detalle={`gastado ${dinero(rep.vivir.gastado, perfil.moneda)} · colchón ${dinero(rep.vivir.colchon, perfil.moneda)}`}
+              onClick={() => abrir('vivir')}
+              moneda={perfil.moneda}
+            />
+            <FilaReparto
+              emoji="💪"
+              titulo="Avanzar"
+              plan={rep.avanzar.plan}
+              detalle={
+                hayPlan
+                  ? `deudas ${dinero(rep.avanzar.deudas, perfil.moneda)} · Grecia ${dinero(rep.avanzar.ahorro, perfil.moneda)} · van ${dinero(rep.avanzar.real, perfil.moneda)}`
+                  : 'sin plan todavía'
+              }
+              onClick={() => abrir('avanzar')}
+              moneda={perfil.moneda}
+            />
+            <div className="fila envolver mt" style={{ gap: 8 }}>
               <button
                 className="btn chico fantasma"
                 onClick={() => setEsperados({ a: perfil.ingresoEsperado?.a ?? 0, b: perfil.ingresoEsperado?.b ?? 0 })}
               >
                 Ingresos esperados
+              </button>
+              <button className="btn chico fantasma" onClick={() => setArmando('plan')}>
+                {hayPlan ? 'Editar plan' : 'Completar plan'}
               </button>
               <button className="btn chico secundario" onClick={() => setEditando(nuevoBolsillo('hogar'))}>
                 + Bolsillo
@@ -178,73 +331,154 @@ export function Caja() {
             </div>
           </div>
 
-          {secciones.length === 0 && (
-            <p className="chica suave centrado">Ningún bolsillo existía todavía en {nombreMes(mes)}.</p>
-          )}
+          {/* ---- 📤 Obligaciones fuera de casa ---- */}
+          <div className="tarjeta" ref={refs.fuera}>
+            <Cabecera
+              titulo="📤 Obligaciones fuera de casa"
+              resumen={`${dinero(rep.fuera.real, perfil.moneda)} de ${dinero(rep.fuera.plan, perfil.moneda)}`}
+              abierta={abierta === 'fuera'}
+              onToggle={() => setAbierta(abierta === 'fuera' ? null : 'fuera')}
+            />
+            {abierta === 'fuera' && (
+              <div style={{ marginTop: 8 }}>
+                {vistasFuera.length === 0 && (
+                  <p className="chica suave">
+                    Ningún bolsillo todavía. Lo que cada uno manda a su familia u otras obligaciones fijas va aquí, y no cuenta
+                    como plata para vivir.
+                  </p>
+                )}
+                {vistasFuera.map((v) => (
+                  <FilaBolsillo key={v.bolsillo.id} v={v} moneda={perfil.moneda} sufijo={nombreDe(perfil, v.bolsillo.ambito as 'a' | 'b')} onClick={() => setDetalle(v.bolsillo.id)} />
+                ))}
+                {sinFuera.n > 0 && (
+                  <p className="mini suave" style={{ marginTop: 8 }}>
+                    Sin bolsillo: {sinFuera.n} {sinFuera.n === 1 ? 'gasto' : 'gastos'} · {dinero(sinFuera.monto, perfil.moneda)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
-          {secciones.map((s) => (
-            <div className="tarjeta" key={s.ambito}>
-              <h3 className="mb">{s.titulo}</h3>
-              {s.vistas.map((v) => (
-                <div
-                  className="item"
-                  key={v.bolsillo.id}
-                  onClick={() => setDetalle(v.bolsillo.id)}
-                  style={{ cursor: 'pointer', display: 'block' }}
-                >
+          {/* ---- 🏠 Vivir ---- */}
+          <div className="tarjeta" ref={refs.vivir}>
+            <Cabecera
+              titulo="🏠 Vivir"
+              resumen={`${dinero(rep.vivir.gastado, perfil.moneda)} de ${dinero(rep.vivir.tope, perfil.moneda)}`}
+              abierta={abierta === 'vivir'}
+              onToggle={() => setAbierta(abierta === 'vivir' ? null : 'vivir')}
+            />
+            {abierta === 'vivir' && (
+              <div className="pila" style={{ marginTop: 8 }}>
+                {secciones.length === 0 && (
+                  <p className="chica suave centrado">Ningún bolsillo existía todavía en {nombreMes(mes)}.</p>
+                )}
+                {secciones.map((s) => (
+                  <div key={s.ambito}>
+                    <h3 className="mb">{s.titulo}</h3>
+                    {s.vistas.map((v) => (
+                      <FilaBolsillo key={v.bolsillo.id} v={v} moneda={perfil.moneda} onClick={() => setDetalle(v.bolsillo.id)} />
+                    ))}
+                    {s.sin.n > 0 && (
+                      <p className="mini suave" style={{ marginTop: 8 }}>
+                        Sin bolsillo: {s.sin.n} {s.sin.n === 1 ? 'gasto' : 'gastos'} · {dinero(s.sin.monto, perfil.moneda)}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {hayPlan && (
+                  <p className="mini suave">
+                    Asignado {dinero(rep.vivir.asignado, perfil.moneda)} del sueldo de {dinero(rep.vivir.tope, perfil.moneda)}
+                    {rep.vivir.colchon >= 0
+                      ? ` · colchón ${dinero(rep.vivir.colchon, perfil.moneda)} para lo que se salga del plan.`
+                      : ` · te pasaste por ${dinero(-rep.vivir.colchon, perfil.moneda)}.`}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ---- 💪 Avanzar ---- */}
+          <div className="tarjeta" ref={refs.avanzar}>
+            <Cabecera
+              titulo="💪 Avanzar"
+              resumen={`${dinero(av.abonos + av.aportes, perfil.moneda)} de ${dinero(av.metaDeudas + av.metaAhorro, perfil.moneda)}`}
+              abierta={abierta === 'avanzar'}
+              onToggle={() => setAbierta(abierta === 'avanzar' ? null : 'avanzar')}
+            />
+            {abierta === 'avanzar' && (
+              <div className="pila" style={{ marginTop: 8 }}>
+                {!hayPlan && <p className="chica suave">Completa el plan para fijar cuánto va a deudas y cuánto a Grecia cada mes.</p>}
+                <div>
                   <div className="fila entre">
+                    <span className="negrita">Deudas · en equipo</span>
                     <span className="negrita">
-                      {v.bolsillo.emoji} {v.bolsillo.nombre}{' '}
-                      <span className="mini suave" style={{ fontWeight: 600 }}>
-                        {v.bolsillo.acumula ? '· guarda' : '· se reinicia'}
-                      </span>
-                    </span>
-                    <span className="monto" style={v.disponible < 0 ? { color: '#b1402a' } : undefined}>
-                      {dinero(v.disponible, perfil.moneda)}
+                      {dinero(av.abonos, perfil.moneda)} <span className="mini suave">de {dinero(av.metaDeudas, perfil.moneda)}</span>
                     </span>
                   </div>
                   <div style={{ marginTop: 6 }}>
-                    <Barra valor={v.avance} color={colorBarra(v)} />
+                    <Barra valor={pct(av.abonos, av.metaDeudas)} color="oliva" />
                   </div>
                   <div className="mini suave" style={{ marginTop: 4 }}>
-                    gastado {dinero(v.gastado, perfil.moneda)} de {dinero(v.tope, perfil.moneda)}
-                    {v.estado === 'rojo' && ' · en rojo'}
-                    {v.estado === 'amarillo' && ' · casi'}
+                    {perfil.nombreA}: {dinero(av.abonosPor.a, perfil.moneda)} · {perfil.nombreB}: {dinero(av.abonosPor.b, perfil.moneda)}
+                    {av.metaDeudas > av.abonos && ` · faltan ${dinero(av.metaDeudas - av.abonos, perfil.moneda)}`}
+                    {av.metaDeudas > 0 && av.abonos >= av.metaDeudas && ' · ¡meta cumplida! 🎉'}
                   </div>
                 </div>
-              ))}
-              {s.sin.n > 0 && (
-                <p className="mini suave" style={{ marginTop: 8 }}>
-                  Sin bolsillo: {s.sin.n} {s.sin.n === 1 ? 'gasto' : 'gastos'} · {dinero(s.sin.monto, perfil.moneda)}
-                </p>
-              )}
-            </div>
-          ))}
+                <div>
+                  <div className="fila entre">
+                    <span className="negrita">Grecia y ahorro</span>
+                    <span className="negrita">
+                      {dinero(av.aportes, perfil.moneda)} <span className="mini suave">de {dinero(av.metaAhorro, perfil.moneda)}</span>
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    <Barra valor={pct(av.aportes, av.metaAhorro)} color="egeo" />
+                  </div>
+                  <div className="mini suave" style={{ marginTop: 4 }}>
+                    {perfil.nombreA}: {dinero(av.aportesPor.a, perfil.moneda)} · {perfil.nombreB}: {dinero(av.aportesPor.b, perfil.moneda)}
+                  </div>
+                </div>
+                <div className="fila" style={{ gap: 8 }}>
+                  <button className="btn chico fantasma" onClick={() => irA('deudas')}>
+                    Ir a Deudas
+                  </button>
+                  <button className="btn chico fantasma" onClick={() => irA('metas')}>
+                    Ir a Hitos
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="tarjeta">
-            <div className="fila entre mb">
-              <h3>Ingresos del mes</h3>
-              <span className="chica suave">{dinero(r.ingresosReales, perfil.moneda)}</span>
-            </div>
-            {ingresosMes.length === 0 ? (
-              <p className="chica suave">Nada anotado todavía. Cuando llegue la nómina, anótala con el +.</p>
-            ) : (
-              ingresosMes.map((i) => {
-                const f = fuenteInfo(i.fuente)
-                return (
-                  <div className="item" key={i.id} onClick={() => setIngreso(i)} style={{ cursor: 'pointer' }}>
-                    <div className="icono">{f.emoji}</div>
-                    <div className="cuerpo">
-                      <div className="titulo">{i.nota || f.texto}</div>
-                      <div className="chica suave">
-                        {fechaCorta(i.fecha)} · {nombreDe(perfil, i.de)}
+            <Cabecera
+              titulo="Ingresos del mes"
+              resumen={`${ingresosMes.length} · ${dinero(r.ingresosReales, perfil.moneda)}`}
+              abierta={verIngresos}
+              onToggle={() => setVerIngresos(!verIngresos)}
+            />
+            {verIngresos &&
+              (ingresosMes.length === 0 ? (
+                <p className="chica suave" style={{ marginTop: 8 }}>
+                  Nada anotado todavía. Cuando llegue la nómina, anótala con el +.
+                </p>
+              ) : (
+                ingresosMes.map((i) => {
+                  const f = fuenteInfo(i.fuente)
+                  return (
+                    <div className="item" key={i.id} onClick={() => setIngreso(i)} style={{ cursor: 'pointer' }}>
+                      <div className="icono">{f.emoji}</div>
+                      <div className="cuerpo">
+                        <div className="titulo">{i.nota || f.texto}</div>
+                        <div className="chica suave">
+                          {fechaCorta(i.fecha)} · {nombreDe(perfil, i.de)}
+                        </div>
                       </div>
+                      <div className="monto">{dinero(i.monto, perfil.moneda)}</div>
                     </div>
-                    <div className="monto">{dinero(i.monto, perfil.moneda)}</div>
-                  </div>
-                )
-              })
-            )}
+                  )
+                })
+              ))}
           </div>
 
           <button
@@ -258,7 +492,7 @@ export function Caja() {
         </>
       )}
 
-      {armando && <ArmarCaja onCerrar={() => setArmando(false)} />}
+      {armando && <ArmarCaja modo={armando} onCerrar={() => setArmando(null)} />}
       {ingreso && <IngresoModal inicial={ingreso} onCerrar={() => setIngreso(null)} onGuardado={() => mostrar('Ingreso anotado 💵')} />}
 
       {esperados && (

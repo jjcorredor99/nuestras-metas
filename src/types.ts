@@ -10,6 +10,17 @@ export interface Perfil {
   aprendidos?: Record<string, Categoria>
   /** Lo que cada uno espera que le entre al mes (para planear los bolsillos). */
   ingresoEsperado?: { a: number; b: number }
+  /** Tres cajas: con qué sueldo se vive y cómo se reparte lo que sobra. */
+  plan?: PlanCaja
+}
+
+/**
+ * La regla de la casa: se vive con un solo sueldo ('menor' = el más bajo de los dos esperados)
+ * y lo que sobra, tras las obligaciones fuera de casa, se reparte entre deudas y ahorro.
+ */
+export interface PlanCaja {
+  sueldoVivir: Persona | 'menor'
+  avanzar: { deudas: number; ahorro: number }
 }
 
 export type Categoria =
@@ -23,6 +34,7 @@ export type Categoria =
   | 'ropa'
   | 'regalos'
   | 'viajes'
+  | 'fuera'
   | 'otros'
 
 /** De dónde salió un gasto que no se escribió a mano. */

@@ -78,7 +78,7 @@ export function Barra({
   color = '',
 }: {
   valor: number
-  color?: 'oliva' | 'egeo' | 'mostaza' | 'coral' | 'blanca' | ''
+  color?: 'oliva' | 'cielo' | 'mostaza' | 'arcilla' | 'blanca' | ''
 }) {
   return (
     <div className={`barra ${color}`}>
@@ -142,7 +142,7 @@ export function EmojiPicker({
   )
 }
 
-const COLORES = ['#14a5a0', '#35c3ba', '#eda32b', '#2f79c4', '#3fae63', '#ef6a52']
+const COLORES = ['#7d9b76', '#4f6b4c', '#dfa32b', '#8fb0c4', '#6f8f5c', '#c98d6b']
 
 export function Confeti({ activo }: { activo: boolean }) {
   const [piezas, setPiezas] = useState<{ x: number; c: string; d: number; r: number }[]>([])

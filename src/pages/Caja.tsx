@@ -35,8 +35,8 @@ const nuevoBolsillo = (ambito: Ambito): BorradorBolsillo => ({
   desde: mesActual(),
 })
 
-const colorBarra = (v: VistaBolsillo): 'oliva' | 'mostaza' | 'coral' =>
-  v.estado === 'rojo' ? 'coral' : v.estado === 'amarillo' ? 'mostaza' : 'oliva'
+const colorBarra = (v: VistaBolsillo): 'oliva' | 'mostaza' | 'arcilla' =>
+  v.estado === 'rojo' ? 'arcilla' : v.estado === 'amarillo' ? 'mostaza' : 'oliva'
 
 type Seccion = 'fuera' | 'vivir' | 'avanzar'
 
@@ -239,7 +239,7 @@ export function Caja() {
       ) : (
         <>
           {hayPlan ? (
-            <div className="tarjeta turquesa">
+            <div className="tarjeta salvia">
               <div className="fila entre">
                 <span className="etiqueta">Vivimos con un sueldo · {nombreMes(mes)}</span>
                 <span className="chip" style={{ background: 'rgba(255,255,255,.22)', color: '#fff', whiteSpace: 'nowrap' }}>
@@ -274,7 +274,7 @@ export function Caja() {
             <div className="fila entre">
               <h3>Reparto del mes</h3>
               {hayPlan && (rep.avanzar.plan < 0 || rep.avanzar.sinRepartir !== 0) && (
-                <span className="chip coral">
+                <span className="chip arcilla">
                   {rep.avanzar.plan < 0
                     ? 'no cierra'
                     : rep.avanzar.sinRepartir > 0
@@ -432,7 +432,7 @@ export function Caja() {
                     </span>
                   </div>
                   <div style={{ marginTop: 6 }}>
-                    <Barra valor={pct(av.aportes, av.metaAhorro)} color="egeo" />
+                    <Barra valor={pct(av.aportes, av.metaAhorro)} color="cielo" />
                   </div>
                   <div className="mini suave" style={{ marginTop: 4 }}>
                     {perfil.nombreA}: {dinero(av.aportesPor.a, perfil.moneda)} · {perfil.nombreB}: {dinero(av.aportesPor.b, perfil.moneda)}

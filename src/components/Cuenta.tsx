@@ -91,7 +91,7 @@ export function Cuenta({ soloUnirse = false }: { soloUnirse?: boolean }) {
               maxLength={6}
               style={{ flex: 1, border: '1px solid var(--linea)', borderRadius: 12, padding: '11px 12px', fontSize: '1.1rem', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 800 }}
             />
-            <button className="btn egeo" disabled={ocupado || codigo.trim().length < 6} onClick={() => correr(() => sync.unirseHogar(codigo))}>
+            <button className="btn cielo" disabled={ocupado || codigo.trim().length < 6} onClick={() => correr(() => sync.unirseHogar(codigo))}>
               Unirme
             </button>
           </div>
@@ -112,11 +112,11 @@ export function Cuenta({ soloUnirse = false }: { soloUnirse?: boolean }) {
           <div className="negrita">{sync.hogar?.nombre}</div>
           <div className="chica suave">{sync.usuario?.email}</div>
         </div>
-        <span className={`chip ${sync.error ? 'coral' : sync.pendientes > 0 ? 'mostaza' : 'oliva'}`}>
+        <span className={`chip ${sync.error ? 'arcilla' : sync.pendientes > 0 ? 'mostaza' : 'oliva'}`}>
           {sync.error ? 'con problemas' : sync.pendientes > 0 ? `${sync.pendientes} por subir` : 'al día'}
         </span>
       </div>
-      <div className="tarjeta centrado" style={{ background: 'var(--egeo-suave)' }}>
+      <div className="tarjeta centrado" style={{ background: 'var(--cielo-suave)' }}>
         <div className="etiqueta">Código del hogar</div>
         <div className="serif negrita" style={{ fontSize: '2rem', letterSpacing: '0.2em' }}>
           {sync.hogar?.codigo}

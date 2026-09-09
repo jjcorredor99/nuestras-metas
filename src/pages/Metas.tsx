@@ -5,7 +5,7 @@ import { dinero, diasHasta, pct, hoy, fechaLarga, fechaCorta, mesesRestantes } f
 import { Modal, Campo, Segmento, Barra, InputMonto, EmojiPicker, Confeti, useToast } from '../components/ui'
 
 const EMOJIS = ['🇬🇷', '🏠', '🚗', '💍', '🐶', '✈️', '🛋️', '🎓', '🌊', '🎸', '🏝️', '🧳']
-const COLORES = ['#14a5a0', '#2f79c4', '#3fae63', '#eda32b', '#8f7bd4', '#ef6a52']
+const COLORES = ['#7d9b76', '#8fb0c4', '#6f8f5c', '#dfa32b', '#a487b5', '#c98d6b']
 
 type Borrador = Omit<Meta, 'id' | 'aportes' | 'fija'> & { id?: string; fija?: boolean }
 
@@ -15,7 +15,7 @@ const nueva = (): Borrador => ({
   emoji: '🏠',
   fecha: `${new Date().getFullYear() + 1}-12-31`,
   montoObjetivo: 0,
-  color: '#14a5a0',
+  color: '#7d9b76',
 })
 
 export function Metas() {
@@ -189,7 +189,7 @@ export function Metas() {
               />
             </Campo>
             <div className="acciones">
-              <button className="btn egeo" disabled={aportando.monto <= 0} onClick={aportar}>
+              <button className="btn cielo" disabled={aportando.monto <= 0} onClick={aportar}>
                 Aportar
               </button>
             </div>

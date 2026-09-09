@@ -192,7 +192,7 @@ export function Gastos() {
         </div>
       )}
 
-      <div className="tarjeta turquesa">
+      <div className="tarjeta salvia">
         <span className="etiqueta">Total {nombreMes(mes)}</span>
         <div className="cifra grande">{dinero(total, perfil.moneda)}</div>
         {balance !== 0 && (

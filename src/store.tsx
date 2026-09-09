@@ -48,7 +48,7 @@ export function estadoInicial(): Estado {
         fecha: '2027-06-15',
         montoObjetivo: 20000000,
         aportes: [],
-        color: '#2f79c4',
+        color: '#8fb0c4',
         fija: true,
       },
     ],

@@ -61,14 +61,14 @@ export function Marca({ tam = 84 }: { tam?: number }) {
   return (
     <svg className="marca-svg" width={tam} height={tam} viewBox="0 0 128 128" aria-hidden>
       <defs>
-        <linearGradient id="marca-coral" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#f88571" />
-          <stop offset="1" stopColor="#e35c4c" />
+        <linearGradient id="marca-agua" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#35c3ba" />
+          <stop offset="1" stopColor="#0b807d" />
         </linearGradient>
       </defs>
       <path
         d="M64 106 C39 90 21 75 21 54 C21 40 32 29 45 29 C54 29 60 33 64 40 C68 33 74 29 83 29 C96 29 107 40 107 54 C107 75 89 90 64 106Z"
-        fill="url(#marca-coral)"
+        fill="url(#marca-agua)"
       />
       <path
         d="M40 60 L51 60 L57.5 47 L66 73 L72.5 60 L88 60"

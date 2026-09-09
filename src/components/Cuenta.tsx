@@ -112,7 +112,7 @@ export function Cuenta({ soloUnirse = false }: { soloUnirse?: boolean }) {
           <div className="negrita">{sync.hogar?.nombre}</div>
           <div className="chica suave">{sync.usuario?.email}</div>
         </div>
-        <span className={`chip ${sync.error ? 'terracota' : sync.pendientes > 0 ? 'mostaza' : 'oliva'}`}>
+        <span className={`chip ${sync.error ? 'coral' : sync.pendientes > 0 ? 'mostaza' : 'oliva'}`}>
           {sync.error ? 'con problemas' : sync.pendientes > 0 ? `${sync.pendientes} por subir` : 'al día'}
         </span>
       </div>

@@ -237,7 +237,7 @@ export function ArmarCaja({ onCerrar, modo = 'completo' }: { onCerrar: () => voi
       {paso === 4 && (
         <div className="pila">
           {sobra <= 0 ? (
-            <div className="tarjeta terracota">
+            <div className="tarjeta coral">
               <span className="etiqueta">No cierra</span>
               <p className="chica" style={{ marginTop: 4 }}>
                 Obligaciones ({dinero(totalFuera, perfil.moneda)}) más un sueldo ({dinero(sueldo.monto, perfil.moneda)}) superan lo

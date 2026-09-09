@@ -133,7 +133,7 @@ export function Retos() {
               <span className="suave">{r.tipo === 'limite' ? `${avance}% del tope` : `${avance}%`}</span>
             </div>
             <div style={{ marginTop: 6 }}>
-              <Barra valor={avance} color={r.tipo === 'limite' ? (pasado ? '' : 'mostaza') : 'oliva'} />
+              <Barra valor={avance} color={r.tipo === 'limite' ? (pasado ? 'coral' : 'mostaza') : 'oliva'} />
             </div>
             <div className="fila mt" style={{ gap: 8 }}>
               {r.tipo === 'habito' ? (

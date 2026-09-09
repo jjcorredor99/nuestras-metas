@@ -149,7 +149,7 @@ export function Gastos() {
         <select
           value={mes}
           onChange={(e) => setMes(e.target.value)}
-          style={{ border: '1px solid var(--linea)', borderRadius: 12, padding: '8px 10px', background: '#fff' }}
+          className="select-mes"
         >
           {meses.map((m) => (
             <option key={m} value={m}>
@@ -192,7 +192,7 @@ export function Gastos() {
         </div>
       )}
 
-      <div className="tarjeta terracota">
+      <div className="tarjeta turquesa">
         <span className="etiqueta">Total {nombreMes(mes)}</span>
         <div className="cifra grande">{dinero(total, perfil.moneda)}</div>
         {balance !== 0 && (

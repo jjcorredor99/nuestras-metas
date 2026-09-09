@@ -130,7 +130,7 @@ export function Facturas() {
                     'pagada este mes'
                   ) : (
                     <>
-                      <span className={dias <= 2 ? 'negrita' : ''} style={dias <= 2 ? { color: '#b1402a' } : undefined}>
+                      <span className={dias <= 2 ? 'negrita' : ''} style={dias <= 2 ? { color: 'var(--alerta)' } : undefined}>
                         {dias < 0 ? `vencida hace ${-dias} d` : dias === 0 ? 'vence hoy' : dias === 1 ? 'vence mañana' : `vence en ${dias} d`}
                       </span>
                       {' · '}día {f.diaVence} · {nombreDe(perfil, f.responsable)}

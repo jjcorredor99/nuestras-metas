@@ -35,8 +35,8 @@ const nuevoBolsillo = (ambito: Ambito): BorradorBolsillo => ({
   desde: mesActual(),
 })
 
-const colorBarra = (v: VistaBolsillo): 'oliva' | 'mostaza' | '' =>
-  v.estado === 'rojo' ? '' : v.estado === 'amarillo' ? 'mostaza' : 'oliva'
+const colorBarra = (v: VistaBolsillo): 'oliva' | 'mostaza' | 'coral' =>
+  v.estado === 'rojo' ? 'coral' : v.estado === 'amarillo' ? 'mostaza' : 'oliva'
 
 type Seccion = 'fuera' | 'vivir' | 'avanzar'
 
@@ -74,7 +74,7 @@ function FilaReparto({
         </div>
         <div className="mini suave">{detalle}</div>
       </div>
-      <div className="monto" style={plan < 0 ? { color: '#b1402a' } : undefined}>
+      <div className="monto" style={plan < 0 ? { color: 'var(--alerta)' } : undefined}>
         − {dinero(plan, moneda)}
       </div>
     </div>
@@ -92,7 +92,7 @@ function FilaBolsillo({ v, moneda, sufijo, onClick }: { v: VistaBolsillo; moneda
             {v.bolsillo.acumula ? '· guarda' : '· se reinicia'}
           </span>
         </span>
-        <span className="monto" style={v.disponible < 0 ? { color: '#b1402a' } : undefined}>
+        <span className="monto" style={v.disponible < 0 ? { color: 'var(--alerta)' } : undefined}>
           {dinero(v.disponible, moneda)}
         </span>
       </div>
@@ -216,7 +216,7 @@ export function Caja() {
         <select
           value={mes}
           onChange={(e) => setMes(e.target.value)}
-          style={{ border: '1px solid var(--linea)', borderRadius: 12, padding: '8px 10px', background: '#fff' }}
+          className="select-mes"
         >
           {meses.map((m) => (
             <option key={m} value={m}>
@@ -239,7 +239,7 @@ export function Caja() {
       ) : (
         <>
           {hayPlan ? (
-            <div className="tarjeta terracota">
+            <div className="tarjeta turquesa">
               <div className="fila entre">
                 <span className="etiqueta">Vivimos con un sueldo · {nombreMes(mes)}</span>
                 <span className="chip" style={{ background: 'rgba(255,255,255,.22)', color: '#fff', whiteSpace: 'nowrap' }}>
@@ -274,7 +274,7 @@ export function Caja() {
             <div className="fila entre">
               <h3>Reparto del mes</h3>
               {hayPlan && (rep.avanzar.plan < 0 || rep.avanzar.sinRepartir !== 0) && (
-                <span className="chip terracota">
+                <span className="chip coral">
                   {rep.avanzar.plan < 0
                     ? 'no cierra'
                     : rep.avanzar.sinRepartir > 0
@@ -532,7 +532,7 @@ export function Caja() {
                 <div className="fila entre">
                   <div>
                     <div className="etiqueta">Disponible · {nombreMes(mes)}</div>
-                    <div className="cifra" style={v.disponible < 0 ? { color: '#b1402a' } : undefined}>
+                    <div className="cifra" style={v.disponible < 0 ? { color: 'var(--alerta)' } : undefined}>
                       {dinero(v.disponible, perfil.moneda)}
                     </div>
                   </div>

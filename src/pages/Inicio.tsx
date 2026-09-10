@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useStore, saldoDeuda, ahorradoMeta, GRECIA_ID } from '../store'
 import { dinero, hoy, mesActual, nombreMes, diasParaVencer, diasHasta, pct, sumar } from '../format'
 import { Barra, Pulso } from '../components/ui'
+import { GatoAsomado, GatoGordo, GatoSiames } from '../components/gatos'
 import { catInfo } from '../categorias'
 import { MuroMini } from './Muro'
 import { useSync } from '../sync'
@@ -83,7 +84,7 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
     <div className="pila">
       <div className="cabecera">
         <div>
-          <p className="sub">{saludo}</p>
+          <p className="etiqueta">{saludo}</p>
           <h1>{perfil.nombrePareja}</h1>
         </div>
         <div className="fila" style={{ gap: 6 }}>
@@ -142,10 +143,10 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
           </p>
         </div>
       ) : conRegla ? (
-        <div className={`tarjeta ${unSueldo.estado === 'rojo' ? 'coral' : 'turquesa'} clic`} onClick={() => ir('caja')}>
+        <div className={`tarjeta ${unSueldo.estado === 'rojo' ? 'arcilla' : 'salvia'} clic`} onClick={() => ir('caja')}>
           <div className="fila entre">
             <span className="etiqueta">Vivimos con un sueldo · {nombreMes(mes).split(' ')[0]}</span>
-            <span className={`chip ${unSueldo.estado === 'rojo' ? 'coral' : unSueldo.estado === 'amarillo' ? 'mostaza' : 'oliva'}`}>
+            <span className={`chip ${unSueldo.estado === 'rojo' ? 'arcilla' : unSueldo.estado === 'amarillo' ? 'mostaza' : 'oliva'}`}>
               {unSueldo.estado === 'rojo' ? 'nos pasamos' : unSueldo.estado === 'amarillo' ? 'casi' : 'vamos bien'}
             </span>
           </div>
@@ -161,16 +162,21 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
             {dinero(caja.queda, perfil.moneda)}
           </p>
           <Pulso dias={pulso} />
-          {frase && <p className="chica" style={{ marginTop: 10 }}>{frase}</p>}
-          {alertas.length > 0 && (
-            <div className="fila envolver" style={{ gap: 6, marginTop: 8 }}>
-              {alertas.map((v) => (
-                <span key={v.bolsillo.id} className={`chip ${v.estado === 'rojo' ? 'coral' : 'mostaza'}`}>
-                  {v.bolsillo.emoji} {v.bolsillo.nombre} {v.estado === 'rojo' ? 'en rojo' : 'casi'}
-                </span>
-              ))}
+          <div className="banda-gato">
+            <div>
+              {frase && <p className="chica" style={{ marginTop: 10 }}>{frase}</p>}
+              {alertas.length > 0 && (
+                <div className="fila envolver" style={{ gap: 6, marginTop: 8 }}>
+                  {alertas.map((v) => (
+                    <span key={v.bolsillo.id} className={`chip ${v.estado === 'rojo' ? 'arcilla' : 'mostaza'}`}>
+                      {v.bolsillo.emoji} {v.bolsillo.nombre} {v.estado === 'rojo' ? 'en rojo' : 'casi'}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+            <GatoGordo />
+          </div>
         </div>
       ) : (
         <div className="tarjeta clic" onClick={() => ir('caja')}>
@@ -189,21 +195,27 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
             {caja.usaEsperado && ' (esperado)'} · Salió {dinero(caja.salidas, perfil.moneda)}
           </p>
           <Pulso dias={pulso} />
-          {frase && <p className="chica" style={{ marginTop: 10 }}>{frase}</p>}
-          {alertas.length > 0 && (
-            <div className="fila envolver" style={{ gap: 6, marginTop: 8 }}>
-              {alertas.map((v) => (
-                <span key={v.bolsillo.id} className={`chip ${v.estado === 'rojo' ? 'coral' : 'mostaza'}`}>
-                  {v.bolsillo.emoji} {v.bolsillo.nombre} {v.estado === 'rojo' ? 'en rojo' : 'casi'}
-                </span>
-              ))}
+          <div className="banda-gato">
+            <div>
+              {frase && <p className="chica" style={{ marginTop: 10 }}>{frase}</p>}
+              {alertas.length > 0 && (
+                <div className="fila envolver" style={{ gap: 6, marginTop: 8 }}>
+                  {alertas.map((v) => (
+                    <span key={v.bolsillo.id} className={`chip ${v.estado === 'rojo' ? 'arcilla' : 'mostaza'}`}>
+                      {v.bolsillo.emoji} {v.bolsillo.nombre} {v.estado === 'rojo' ? 'en rojo' : 'casi'}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+            <GatoGordo />
+          </div>
         </div>
       )}
 
       {grecia && (
-        <div className="tarjeta egeo clic" onClick={() => ir('metas')}>
+        <div className="tarjeta cielo con-siames clic" onClick={() => ir('metas')}>
+          <GatoSiames />
           <div className="fila entre">
             <span className="etiqueta">Hito · {grecia.emoji} Grecia 2027</span>
             <span className="chip" style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>
@@ -301,6 +313,7 @@ export function Inicio({ ir }: { ir: (p: string) => void }) {
 
       {topCats.length > 0 && (
         <div className="tarjeta">
+          <GatoAsomado />
           <h3 className="mb">En qué se nos fue</h3>
           {topCats.map(([c, v]) => {
             const info = catInfo(c as never)

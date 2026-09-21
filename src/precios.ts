@@ -19,6 +19,9 @@ const esUnidad = (u: string | null): u is Unidad => u === 'l' || u === 'kg' || u
 const esTienda = (t: string): t is TiendaId =>
   t === 'exito' || t === 'carulla' || t === 'makro' || t === 'd1' || t === 'ara'
 
+/** Las funciones que de verdad traen precios; el descubridor solo prueba caminos. */
+const TRAEN_PRECIOS = ['precios-tiendas', 'precios-folletos']
+
 /** true cuando todavía no han pegado supabase/precios.sql. */
 const faltanTablas = (e: unknown): boolean =>
   /does not exist|could not find the (table|function)|schema cache/i.test(
@@ -107,9 +110,14 @@ export function usePrecios(): EstadoPrecios {
   }, [filas])
 
   // La última corrida de cada tienda; si falló, la app lo dice en vez de callarse.
+  // El descubridor no cuenta: es una probada semanal, y que D1 no tenga API no es
+  // una caída de la que haya que avisar (para eso está marcada como de folleto).
   const caidas = useMemo(() => {
     const ultima = new Map<string, FilaCorrida>()
-    for (const c of corridas) if (!ultima.has(c.tienda_id)) ultima.set(c.tienda_id, c)
+    for (const c of corridas) {
+      if (!TRAEN_PRECIOS.includes(c.funcion)) continue
+      if (!ultima.has(c.tienda_id)) ultima.set(c.tienda_id, c)
+    }
     return [...ultima.values()]
       .filter((c) => c.ok === false && esTienda(c.tienda_id))
       .map((c) => ({ tienda: c.tienda_id as TiendaId, desde: c.iniciado_en.slice(0, 10) }))

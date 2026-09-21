@@ -7,36 +7,39 @@ Gastos y la Caja dice cuánto queda. No sabe nada *antes* de la compra. El merca
 los gastos más grandes y más repetidos de la casa, y en Bogotá el mismo producto puede
 costar muy distinto en Éxito, Carulla, Makro, D1 y Ara.
 
-La idea es cerrar ese hueco: un robot que consulta los precios solo, una página que los
+Este plan cierra ese hueco: un robot que consulta los precios solo, una página que los
 compara producto por producto, y una lista de compras que dice cuánto va a costar y dónde
 conviene comprarla. Es el paso que falta para que la Caja se planee, no solo se mida.
 
-Decisiones ya tomadas con el usuario: la infraestructura va en **Supabase** (tabla de
-precios + Edge Function programada), **D1 y Ara se intentan por folleto semanal**, el
-alcance es **comparar + lista de compras** (la conexión con Caja/Gastos queda para después)
-y la ciudad es **Bogotá**.
+Decisiones tomadas de antemano: la infraestructura va en **Supabase** (tablas de precios +
+Edge Functions programadas), **D1 y Ara se intentan por folleto semanal**, el alcance es
+**comparar + lista de compras** (la conexión con Caja/Gastos queda para después) y la ciudad
+es **Bogotá**.
 
-## Lo que no se pudo verificar desde aquí
+## Lo que no se pudo verificar
 
-El proxy de esta sesión bloquea los dominios de las tiendas (403 en `www.exito.com` y
-`www.carulla.com`). **Ningún endpoint de tienda está comprobado.** Lo que sí se sabe:
-Éxito y Carulla son del mismo grupo y corren sobre VTEX, que expone un catálogo público
-(`/api/catalog_system/pub/products/search`); Makro Colombia muy probablemente también; D1
-y Ara casi no tienen tienda en línea y por eso van por folleto.
+El plan se escribió en un entorno cuyo proxy bloquea los dominios de las tiendas (403 en
+`www.exito.com` y `www.carulla.com`). **Ningún endpoint de tienda está comprobado.** Lo que
+sí se sabe: Éxito y Carulla son del mismo grupo y corren sobre VTEX, que expone un catálogo
+público; Makro Colombia muy probablemente también; D1 y Ara casi no tienen tienda en línea y
+por eso van por folleto.
 
-Por eso la **Fase 0 es un descubrimiento ejecutable** y todo el diseño asume que cualquier
-tienda puede resultar ilegible: cada una es un adaptador independiente y cada una puede
-caer a "precio anotado a mano" sin tumbar a las demás.
+De ahí salen las dos decisiones que sostienen todo el diseño: la **Fase 0 es un
+descubrimiento ejecutable**, y la **Fase 1 entrega una app completa que funciona sin
+raspar nada**. Si el raspado nunca llega, la pareja ya tiene la comparación que hoy haría en
+un papel. Cada tienda es un adaptador independiente y cualquiera puede caer a "precio
+anotado a mano" sin tumbar a las demás.
 
 ## Arquitectura
 
 ```
-pg_cron (diario 6am Bogotá) ──► Edge Function `precios`  ──► VTEX Éxito/Carulla/Makro
-pg_cron (semanal)           ──► Edge Function `folletos` ──► folleto D1/Ara → Claude (visión)
+pg_cron (diario 6am Bogotá) ──► Edge Function `precios-tiendas`  ──► VTEX Éxito/Carulla/Makro
+pg_cron (lunes)             ──► Edge Function `precios-folletos` ──► folleto D1/Ara → Claude
+la app, al vincular         ──► Edge Function `precios-buscar`   ──► búsqueda en vivo
                                         │
                                         ▼
-                            tabla public.precios (histórico por día)
-                                        │  (lectura para cualquiera con sesión)
+                        tablas public.tiendas · precios · precios_corridas
+                                        │  (lectura: cualquiera con sesión)
                                         ▼
                     src/pages/Mercado.tsx  ·  canasta, comparación, lista
                                         ▲
@@ -44,215 +47,376 @@ pg_cron (semanal)           ──► Edge Function `folletos` ──► folleto
                                         │ que ya sincroniza los dos celulares
 ```
 
-Dos mundos separados a propósito:
+Dos dominios con dueños distintos, separados a propósito:
 
-- **Los precios son datos públicos de catálogo**, no del hogar. Viven en tablas nuevas,
-  fuera de `items`, y los escribe solo la Edge Function (service role).
-- **La canasta y las listas son del hogar.** Van como tipos nuevos en la tabla `items` que
-  ya existe, así se sincronizan entre los dos celulares, funcionan sin internet y entran en
-  el respaldo de Ajustes sin código nuevo de sync.
+| Dato | De quién es | Dónde vive | Cómo llega |
+|---|---|---|---|
+| Precios de catálogo | de nadie, son públicos | tablas nuevas | Edge Function + cron |
+| Canasta y lista de compras | del hogar | `public.items` | el sync que ya existe |
 
-## Fase 0 · Descubrimiento (bloqueante, antes de escribir la función definitiva)
+Los precios **no** pueden ir en `items`: son miles de filas, no pertenecen al hogar, los
+escribe el `service_role`, y meterlos ahí los haría viajar dentro de la carga inicial de
+cada celular.
 
-Un script corto (`scripts/descubrir.ts`, se corre con `node --experimental-strip-types`
-desde una máquina sin proxy, o se pega en una Edge Function temporal) que por cada tienda
-imprime: código HTTP, forma de la respuesta y el precio de un producto de prueba ("leche
-entera 1 litro"). Cubre:
+## Fase 0 · Descubrimiento (antes de escribir un solo adaptador)
 
-- Éxito / Carulla / Makro: `https://<dominio>/api/catalog_system/pub/products/search/?ft=leche`
-  y, si eso falla, el endpoint de *intelligent search* de VTEX.
-- D1 y Ara: dónde está el folleto de la semana y en qué formato (PDF, imágenes, o una
+Se despliega **solo** `supabase/functions/precios-descubrir` y se llama una vez por tienda.
+Corre desde la red de Supabase, no desde una máquina con proxy. Por cada tienda prueba una
+cascada de endpoints candidatos y escribe en `tiendas.config.estrategia` cuál respondió:
+
+- Éxito / Carulla / Makro — Plan A: *intelligent search* de VTEX. Plan B:
+  `/api/catalog_system/pub/products/search`. Plan C: el JSON incrustado en el HTML del
+  producto. Plan D: fallar limpio y anotarlo.
+- D1 y Ara — dónde está el folleto de la semana y en qué formato (PDF, imágenes, o una
   página que hay que leer).
 
-**Salida de la fase**: una tabla de tres columnas — tienda · cómo se lee · qué devuelve —
-que decide qué adaptador se escribe. Una tienda que no se pueda leer queda registrada con
-`fuente = 'manual'` y sigue apareciendo en la comparación, solo que con el precio que
-ustedes anoten. Esto no se negocia con esfuerzo: si Makro no abre, Makro es manual.
+Qué pasa según el resultado:
 
-## Fase 1 · Esquema (`supabase/precios.sql`)
+| Resultado | Consecuencia |
+|---|---|
+| Éxito y Carulla responden | Fase 2 sigue; son el núcleo |
+| Makro no responde | queda con `fuente = 'manual'`; la columna sigue en la tabla y se llena a mano. Cero cambios de UI |
+| Ninguna tienda con API responde | el proyecto **no se cancela**: la Fase 1 ya entregó la app útil. Se replantea con folleto para las cinco |
+| D1/Ara sin folleto descargable | se cae al modo "foto del folleto": la misma función, disparada desde la app con las fotos que tomen en la tienda |
 
-Archivo nuevo, idempotente, en español y con el mismo estilo de `supabase/schema.sql`
-(`create ... if not exists`, RLS explícita, comentarios que explican el porqué).
+## Fase 1 · El seguro: la app completa, con precios a mano
+
+No depende de nada externo. Al terminar esta fase la función ya sirve.
+
+### `supabase/precios.sql` (archivo nuevo)
+
+Mismas convenciones que `supabase/schema.sql` y `supabase/mensajes.sql`: todo en español,
+`create ... if not exists`, idempotente, pegable en el SQL Editor.
 
 - `public.tiendas` — `id` ('exito', 'carulla', 'makro', 'd1', 'ara'), nombre, `fuente`
-  ('api' | 'folleto' | 'manual'), `ciudad` (default 'bogota'), `activa`, `config jsonb`
-  (dominio, canal de venta, URL del folleto).
-- `public.productos_tienda` — el SKU tal como existe en cada tienda: `(tienda, sku)` como
-  llave, nombre, marca, presentación, `cantidad` + `unidad` ('g' | 'ml' | 'un'), url,
-  imagen. Estas filas nacen cuando alguien vincula un producto desde la app; el robot solo
-  refresca lo que ya está vinculado, así no se consulta catálogo de más.
-- `public.precios` — histórico: llave `(tienda, sku, dia)`, `precio`, `precio_lista` (el de
-  antes del descuento), `disponible`, `fuente`, `confianza` (1 para API, menos para
-  folleto), `vigente_hasta` (las ofertas de folleto caducan), `visto_en`. El histórico es lo
-  que después permite decir "esto subió" sin código nuevo.
-- `public.precios_hoy` — vista con `security_invoker = true` (si no, la vista se salta la
-  RLS): el último precio por `(tienda, sku)` con el nombre del producto y la tienda pegados.
-- `public.corridas` — bitácora: cuándo corrió, qué tienda, cuántos precios, qué falló. Sin
-  esto, una tienda que empieza a devolver vacío se rompe en silencio.
+  ('api' | 'folleto' | 'manual'), `ciudad` (default 'Bogotá'), `activa`, `orden`,
+  `config jsonb` (dominio, canal de venta, estrategia que funcionó, URL del folleto).
+- `public.precios` — llave primaria `(tienda_id, sku, dia)`: **el histórico diario sale
+  gratis de la llave**. Correr el robot dos veces el mismo día actualiza la misma fila;
+  correrlo mañana crea la del día siguiente. Sin tabla de histórico aparte. Campos: `nombre`,
+  `marca`, `precio`, `precio_lista` (antes del descuento), `contenido` + `unidad`
+  ('l' | 'kg' | 'un'), `promocion` ('2x1'), `vigente_hasta` (las ofertas de folleto caducan),
+  `url`, `imagen`, `fuente`, `capturado_en`.
+- `public.precios_corridas` — bitácora: qué tienda, cuándo, si salió bien, cuántas filas y
+  qué error. Sin esto, una tienda que empieza a devolver vacío se rompe en silencio; con
+  esto, la app puede decir "Makro no se pudo leer desde el martes".
+- `public.precios_ultimos` — vista `distinct on (tienda_id, sku)` con
+  `security_invoker = on` (si no, la vista se salta la RLS de quien consulta).
 
-RLS: lectura para cualquier usuario autenticado (`auth.uid() is not null` — son precios
-públicos, no hay nada del hogar ahí); escritura solo para el service role, con una única
-excepción: un usuario autenticado puede insertar en `precios` si `fuente = 'manual'`, que es
-como se anota el precio de D1/Ara visto en la tienda.
+**RLS**: lectura para cualquier usuario autenticado — son precios públicos, no hay nada del
+hogar ahí. **No hay política de escritura**, y eso no es un olvido: el `service_role` se
+salta la RLS, así que escriben las Edge Functions y nadie más. Va comentado en el SQL.
 
-Programación con `pg_cron` + `pg_net`, con la clave de servicio en Vault (nunca en el SQL):
-`precios` diario a las 11:00 UTC (6am Bogotá) y `folletos` una vez por semana. El bloque de
-`cron.schedule` va envuelto en un `do $$ ... $$` que primero desprograma, para poder pegar
-el archivo varias veces.
+El único camino de escritura desde la app es una función, calcada del patrón de
+`entrada_sms` en `supabase/mensajes.sql`:
 
-## Fase 2 · Edge Function `precios` (tiendas con API)
+```sql
+create or replace function public.precio_manual(
+  p_tienda text, p_nombre text, p_precio numeric,
+  p_contenido numeric default null, p_unidad text default null, p_sku text default null)
+returns text language plpgsql security definer set search_path = public as $$ ... $$;
+grant execute on function public.precio_manual(text,text,numeric,numeric,text,text) to authenticated;
+```
 
-`supabase/functions/precios/index.ts` (Deno, TypeScript) + `supabase/functions/_shared/`:
+El `sku` de un precio manual es determinista y con prefijo (`manual:<sha256 del nombre>`):
+nunca choca con uno real, y anotar dos veces el mismo producto actualiza en vez de duplicar.
 
-- `tiendas/vtex.ts` — un solo adaptador para Éxito, Carulla y Makro si las tres son VTEX;
-  se parametriza con dominio y canal de venta desde `tiendas.config`. Expone
-  `buscar(termino)` (para la pantalla de vincular) y `precios(skus)` (para el refresco).
-- `index.ts` — lee las tiendas activas con `fuente = 'api'`, agrupa los SKUs vinculados por
-  tienda, consulta en lotes con una pausa corta entre lotes, y hace `upsert` en `precios`.
-  Cada tienda corre en su propio `Promise.allSettled`: **una tienda caída no tumba a las
-  demás**, queda anotada en `corridas` y la app muestra su precio como viejo.
-- Reintentos: dos, con espera creciente, solo para errores de red y 5xx. Un 403 o un 404 no
-  se reintenta — se anota y se sigue.
-- Buena vecindad: es un uso personal y de bajo volumen (una consulta por SKU vinculado al
-  día). Nada de paralelismo agresivo ni de recorrer catálogos enteros.
-
-## Fase 3 · Modelo de la canasta y emparejamiento entre tiendas
-
-Este es el problema difícil: "Leche Colanta 1L" no se llama igual en cinco tiendas y buscar
-por texto en cada consulta da comparaciones falsas (compara 1L contra 900ml contra un six
-pack). La solución es **vincular una vez a mano y comparar siempre por unidad**.
-
-En `src/types.ts`, dos tipos nuevos dentro de `Estado`:
+### El modelo de la canasta (`src/types.ts`)
 
 ```ts
 export type TiendaId = 'exito' | 'carulla' | 'makro' | 'd1' | 'ara'
+export type Unidad = 'l' | 'kg' | 'un'
 
-export interface VinculoTienda { tienda: TiendaId; sku: string; nombre: string }
+/** Un producto de la canasta ↔ el SKU con que lo llama una tienda. */
+export interface Vinculo {
+  tienda: TiendaId
+  sku: string
+  nombre: string        // como lo escribe la tienda
+  contenido: number     // 1.1 (la bolsa de 1.100 ml)
+  unidad: Unidad
+  confirmado: boolean   // lo tocó una persona, no lo adivinó la app
+}
 
 export interface Producto {
   id: string
-  nombre: string              // como lo dicen ustedes: "Leche"
+  nombre: string        // 'Leche Colanta 1L', como lo dicen ustedes
   emoji: string
-  unidad: 'g' | 'ml' | 'un'   // en qué se compara
-  cantidadHabitual: number    // lo que suelen llevar
-  vinculos: VinculoTienda[]   // el SKU exacto en cada tienda
-  creadoEn: string
+  unidad: Unidad        // en qué se compara
+  contenidoRef: number  // 1 (un litro)
+  vinculos: Vinculo[]
+  habitual: number      // cuántos suelen llevar
+  activo: boolean
 }
 
-export interface ItemLista { productoId: string; cantidad: number; comprado: boolean }
-export interface ListaCompras {
-  id: string; titulo: string; fecha: string; items: ItemLista[]; cerrada: boolean
-}
+export interface ItemLista { productoId: string; cantidad: number; listo: boolean }
+export interface ListaCompras { id: string; nombre: string; creadaEn: string; items: ItemLista[] }
 ```
 
-Cambios mínimos para que se sincronicen, siguiendo el camino que ya existe. **No hay
-migración SQL**: la tabla `items` es genérica y la RLS ya la cubre.
+Los vínculos viven **dentro** del producto, no como entidad suelta: un producto es una fila
+de `items`, sin huérfanos ni orden de aplicación que cuidar.
 
-- `src/types.ts` — las dos interfaces y los dos campos nuevos en `Estado`.
-- `src/supabase.ts:22,25` — agregar `'producto'` y `'lista'` al tipo `TipoItem` y a
-  `TIPOS_ITEM`. Una versión vieja de la app **ignora los tipos que no conoce y no los anota
-  como conocidos** (`src/sync.tsx:128-130`), justo para no borrárselos al otro celular: un
-  teléfono sin actualizar no se rompe, simplemente no ve el Mercado.
-- `src/store.tsx`, cuatro puntos (es el checklist que ya siguieron `bolsillo` e `ingreso`):
-  (a) las colecciones en `estadoInicial()`; (b) las variantes en la unión `Accion`;
-  (c) los `case` del reducer — `producto/agregar|editar|borrar|vincular` y
-  `lista/agregar|editar|borrar|marcar`, con el patrón
-  `{ ...s, col: [{ ...a.x, id: uid() }, ...s.col] }`; (d) **registrarlas en `COLECCION`
-  (`:331-340`) y en `filasDeEstado()` (`:369-383`)** — si se olvida esto, la sección
-  funciona local y nunca sincroniza.
+### Que se sincronicen (sin tocar SQL ni RLS)
+
+La tabla `items` ya es genérica. Los cambios son los del checklist que ya siguieron
+`bolsillo` e `ingreso`:
+
+- `src/supabase.ts:22,25` — `'producto'` y `'lista'` en `TipoItem` y en `TIPOS_ITEM`.
+- `src/store.tsx`, cuatro puntos: (a) `productos: []` y `listas: []` en `estadoInicial()`;
+  (b) las variantes en la unión `Accion`; (c) los `case` del reducer —
+  `producto/agregar|editar|borrar|vincular|desvincular` y
+  `lista/crear|editar|borrar|poner|marcar|limpiar`; (d) **registrarlas en `COLECCION`
+  (`:331-340`) y en `filasDeEstado()` (`:369-383`)**. Si se olvida (d), la sección funciona
+  local y nunca sincroniza.
 - `src/sync.tsx` — nada que tocar: `aplicarFilas()` resuelve por `COLECCION[f.tipo]` y el
   empuje sale de `filasDeEstado()`.
+- **Sin migración de estado y sin subir `version`**: `cargar()` hace
+  `{ ...estadoInicial(), ...guardado }`, así que un localStorage viejo recibe los arrays
+  vacíos solo.
 
-Flujo de vinculación en la UI: escriben "leche" → la app busca en las tiendas con API (vía
-la Edge Function, que también expone `?buscar=`) → eligen el resultado exacto de cada tienda
-→ se guarda el vínculo y se crea la fila en `productos_tienda` para que el robot lo refresque
-de ahí en adelante. Para D1 y Ara, el vínculo es contra lo que haya salido del folleto, o se
-deja el campo de precio a mano.
+Compatibilidad entre celulares: `aplicarRemotas` descarta la fila de tipo desconocido
+**antes** de anotarla en `conocidas` (`src/sync.tsx:128-130`), y `empujar()` calcula los
+borrados recorriendo solo las llaves de `conocidas`. O sea: un celular con la versión vieja
+ve las filas nuevas, las ignora, **y nunca las marca como borradas**. Exactamente lo que se
+necesita mientras uno actualiza antes que el otro.
 
-## Fase 4 · Lógica pura (`src/mercado.ts`) y página (`src/pages/Mercado.tsx`)
+### El problema difícil: emparejar "Leche Colanta 1L" entre cinco tiendas
 
-Toda la matemática en un archivo sin React, como ya se hizo con `src/caja.ts`:
+No se resuelve con un algoritmo. Se resuelve **guardando el trabajo humano una sola vez**.
 
-- `precioPorUnidad(precio, cantidad, unidad)` — normaliza a precio por kilo, por litro o por
-  unidad. Es lo único que hace honesta la comparación.
-- `comparar(producto, precios)` — devuelve la fila de tiendas ordenada, con la más barata
-  marcada y las que no tienen dato aparte.
-- `frescura(visto_en, vigente_hasta, hoy)` — `'fresco'` | `'viejo'` (más de 7 días) |
-  `'vencido'` (oferta de folleto que ya pasó). La UI nunca muestra un precio sin decir de
-  cuándo es.
-- `totalPorTienda(lista, precios)` — cuánto cuesta la lista completa en cada tienda, y qué
-  productos le faltan a esa tienda (una tienda que no tiene la mitad de la lista no es una
-  ganga).
-- `repartoOptimo(lista, precios)` — cada producto en su tienda más barata: total, ahorro
-  contra la mejor tienda única, y en cuántas tiendas tocaría parar. Sirve para la pregunta
-  real: *¿vale la pena la segunda parada?*
+Cada tienda vende otra presentación: Éxito la bolsa de 1.100 ml, D1 la de 900. Comparar el
+precio absoluto sería mentir; se compara **precio por unidad base**. Por eso el `Vinculo`
+guarda el contenido real de *esa* presentación.
 
-Una página nueva son cinco ediciones, las mismas de siempre: el archivo
-`src/pages/Mercado.tsx` con `export function Mercado()`; su import y su entrada en `PAGINAS`
-y en la cadena de render de `src/App.tsx` (navegación por hash, sin router); y el trazo SVG
-en `TRAZOS` de `src/components/iconos.tsx` **con la clave `'mercado'`, idéntica al id de la
-página** (el nav hace `<Icono nombre={p.id} />` y devuelve `null` si falta). El molde es
-`src/pages/Facturas.tsx`: `type Borrador` local con `id?` (con id = editar, sin id = crear),
-lecturas con `useMemo`, escrituras solo por `dispatch`, y la estructura
-`div.pila > div.cabecera > div.grid2 > lista de div.item > FAB > Modal`.
+Flujo de vinculación, una vez por producto y tienda:
 
-Ojo: con Mercado la barra queda en diez botones; entra después de Gastos y, si se aprieta en
-el celular, se le pone la clase `solo-escritorio` a alguna de las de más abajo, como ya se
-hace con Muro y Ajustes.
+1. Crean el producto: nombre, emoji, unidad base (`l`) y contenido de referencia (`1`).
+2. "Buscar en las tiendas" → `precios-buscar` con el texto.
+3. Vuelven candidatos por tienda, ordenados por puntaje y **ya con el precio por litro
+   calculado**. Tocan el correcto → se guarda el vínculo con `confirmado: true`.
+4. Tienda sin candidato (D1/Ara sin folleto, o cualquiera caída) → "Anotar el precio a mano"
+   llama a `precio_manual` y crea el vínculo con el sku que devuelve.
+5. Un candidato con puntaje muy alto y contenido que calza queda preseleccionado pero
+   `confirmado: false`, marcado con un asterisco hasta que alguien lo toque.
 
-- **Canasta**: cada producto con su precio por tienda, la más barata resaltada, el precio por
-  unidad debajo en letra chica, y un sello de cuándo se vio. Los de folleto van marcados
-  como tales.
-- **Lista**: se marcan productos y cantidades; arriba, "todo en Éxito: $X · repartido: $Y
-  (ahorran $Z en 2 paradas)". En modo compra, cada línea se tacha al marcarla.
-- **Precio a mano**: en cualquier tienda, un botón para escribir el precio que vieron; queda
-  con `fuente = 'manual'` y su fecha.
+### La lógica pura (`src/mercado.ts`)
 
-Nada de UI nueva desde cero: `Modal`, `Campo`, `Segmento`, `Vacio`, `InputMonto`,
-`EmojiPicker` y `useToast` ya están en `src/components/ui.tsx`, y `dinero()` de
-`src/format.ts` formatea la plata. La página usa `useStore()` y `dispatch` igual que
-`src/pages/Facturas.tsx`.
+Sin React, como `src/caja.ts`. Es lo que se prueba:
 
-## Fase 5 · Folletos de D1 y Ara (`supabase/functions/folletos`)
+```ts
+normalizarNombre(s): string                          // mayúsculas, sin tildes, sin 'X 1 UND'
+leerContenido(nombre): { contenido, unidad } | null  // '1.100 ml' → 1.1 l · 'x6 und' → 6 un
+precioPorUnidad(precio, contenido): number
+puntajeCoincidencia(canonico, deLaTienda, contenidos?): number   // 0..1
+frescura(dia, vigenteHasta, hoy): 'hoy' | 'reciente' | 'viejo' | 'vencido'
+totalEnUnaTienda(lista, precios, tienda): { total, faltan }
+mejorRepartido(lista, precios, maxTiendas = 2): { tiendas, total, asignacion, faltan }
+comparativo(lista, precios): { unaTienda, repartido, ahorro, frase }
+```
 
-Semanal. Baja el folleto de la semana, convierte las páginas a imágenes y se las pasa a
-Claude para que devuelva JSON estructurado:
+Decisiones que importan:
 
-- SDK oficial `npm:@anthropic-ai/sdk` desde Deno, modelo `claude-opus-5`, con
-  `output_config: { format: ... }` (structured outputs) y un esquema que pida, por producto:
-  nombre, marca, presentación, cantidad, unidad, precio y vigencia.
-- `ANTHROPIC_API_KEY` como secreto de la función (`supabase secrets set`), nunca en el repo.
-- Lo que sale se inserta con `fuente = 'folleto'`, `confianza` menor que 1 y `vigente_hasta`,
-  y la UI lo muestra siempre marcado como "del folleto". Un precio de folleto nunca se
-  presenta con la misma cara que uno de API.
-- Costo: un folleto de ~20 páginas son unos 30–40K tokens de entrada; a $5 por millón de
-  tokens de entrada, es del orden de **US$0.20 por corrida semanal**. Si con el tiempo
-  molesta, `claude-haiku-4-5` hace este trabajo por una quinta parte.
-- Esta fase es la más frágil del plan y va de última a propósito: si el folleto cambia de
-  formato o no se puede bajar, D1 y Ara quedan en precio a mano y **todo lo demás sigue
-  funcionando**.
+- **Leer el contenido desde el texto vive solo en el cliente**, no duplicado en Deno. Las
+  Edge Functions guardan `contenido`/`unidad` únicamente cuando la fuente los da explícitos
+  (VTEX entrega `unitMultiplier` y `measurementUnit`; Claude los devuelve estructurados). Si
+  vienen nulos, la app los deduce del nombre. Una implementación, un set de pruebas.
+- **"Todo en una tienda"** se ordena por `(faltantes, total)`: una tienda barata a la que le
+  falten tres cosas no puede ganar.
+- **"Repartido"** es fuerza bruta sobre los 32 subconjuntos de cinco tiendas, con tope de
+  paradas (2 por defecto). Resultado exacto y explicable, cero heurística que justificar.
+- **El resultado se dice en una frase**, al estilo de `src/caja.ts`: *"Todo en Éxito:
+  $184.300. Repartido entre D1 y Carulla: $161.900 — ahorran $22.400 por ir a dos sitios."*
+  Y solo se declara ahorro si pasa un umbral (unos $5.000 o 3%); por debajo, "prácticamente
+  igual, vayan al que les quede cerca". Un plan que manda a cruzar la ciudad por $900 no
+  sirve.
+
+### La página (`src/pages/Mercado.tsx`)
+
+Cinco ediciones, las de siempre: el archivo con `export function Mercado()`; su import, su
+entrada en `PAGINAS` y su línea de render en `src/App.tsx` (navegación por hash, sin router);
+y el trazo SVG en `TRAZOS` de `src/components/iconos.tsx` **con la clave `'mercado'`,
+idéntica al id de la página** (el nav hace `<Icono nombre={p.id} />` y devuelve `null` si
+falta). Molde: `src/pages/Facturas.tsx` — `type Borrador` local con `id?`, lecturas con
+`useMemo`, escrituras solo por `dispatch`, estructura
+`div.pila > div.cabecera > div.grid2 > lista de div.item > FAB > Modal`. Se reusan `Modal`,
+`Campo`, `Segmento`, `Vacio`, `InputMonto`, `EmojiPicker` y `useToast` de
+`src/components/ui.tsx`, y `dinero()` de `src/format.ts`.
+
+- **Comparar**: una fila por producto, una columna por tienda. En cada celda el precio de la
+  presentación y debajo, en letra chica, el precio por litro o kilo; la más barata de la fila
+  resaltada. Celda sin vínculo: "vincular". Celda sin precio de hoy: el último conocido,
+  atenuado.
+- **Lista**: productos con cantidad, marcables al ir comprando, y abajo el panel de decisión
+  con la frase.
+- **Precio a mano** en cualquier celda, con su fecha.
+
+Cómo se marca lo que no es confiable — un precio de folleto de hace cinco días no vale lo
+mismo que uno de la API de hoy:
+
+| Señal | En pantalla |
+|---|---|
+| API y es de hoy | precio limpio |
+| entre 1 y 3 días | precio + "hace 2 d" |
+| más de 3 días | atenuado + "puede haber cambiado" |
+| del folleto | insignia 📰 "del folleto" |
+| `vigente_hasta` ya pasó | tachado, **no cuenta en los totales** |
+| anotado a mano | insignia ✍️ + fecha |
+
+Y un interruptor **"solo precios confiables"** que recalcula todo excluyendo folleto y
+viejos, para ver si la recomendación aguanta. Más una línea de estado alimentada por
+`precios_corridas`. La app tiene que *verse* desactualizada cuando lo está, en vez de mentir
+con un precio viejo.
+
+Ojo con la barra: con Mercado quedan diez botones. Entra entre Caja y Gastos y, si se
+aprieta en el celular, se le pone la clase `solo-escritorio` a alguna de más abajo, como ya
+se hace con Muro y Ajustes.
+
+## Fase 2 · Éxito y Carulla (las tiendas con API)
+
+```
+supabase/functions/
+  _compartido/  tipos.ts · db.ts (service role, guardarPrecios, abrir/cerrarCorrida) · red.ts
+  precios-descubrir/   el checkpoint de la fase 0
+  precios-tiendas/     index.ts (orquestador) · vtex.ts · exito.ts carulla.ts makro.ts
+  precios-buscar/      búsqueda en vivo para vincular
+  precios-folletos/    index.ts · claude.ts · d1.ts ara.ts
+```
+
+Contrato de adaptador: `buscar(termino, cfg)`, `traer(skus, cfg)`, `descubrir?()`. Éxito,
+Carulla y (probablemente) Makro son VTEX, así que `vtex.ts` es **un solo adaptador
+parametrizado** por dominio, canal de venta y región; `exito.ts` y compañía solo exportan su
+config.
+
+Reglas de aislamiento, que son la mitad del valor:
+
+- El orquestador corre `Promise.allSettled` por tienda. **Una tienda caída no toca a las
+  demás**: cada una abre y cierra su propia corrida y escribe sus propias filas.
+- Reintentos con espera creciente y jitter, **solo** para red, 429 y 5xx. Un 404 o un 400 no
+  se reintenta: es un SKU que ya no existe, y se anota.
+- Timeout duro por petición (`AbortController`), lotes de ~50 SKUs con una pausa corta entre
+  lotes.
+- La respuesta HTTP **siempre es 200** con un resumen por tienda. Un 500 haría que `pg_net`
+  solo registre "falló", sin decir de quién.
+- Buena vecindad: es uso personal y de bajo volumen — una consulta por SKU vinculado al día.
+  Nada de paralelismo agresivo ni de recorrer catálogos enteros.
+
+Despliegue manual: `npx supabase functions deploy precios-tiendas`.
+
+## Fase 3 · Makro
+
+Según lo que haya dicho la Fase 0. Si es VTEX, es una config más en `vtex.ts` y no hay
+código nuevo. Si no, queda en `fuente = 'manual'` y la columna se llena a mano. No se pelea.
+
+## Fase 4 · Folletos de D1 y Ara, leídos por Claude
+
+Cada adaptador de folleto expone `paginas(): Promise<{ tipo: 'pdf'|'imagen'; datos }[]>`. Si
+la descarga falla, hay un segundo camino que usa **el mismo código**: la pareja le toma foto
+al folleto en la tienda y la app manda las imágenes a la misma función. Automático y manual
+asistido comparten todo menos el origen de las páginas.
+
+```ts
+// supabase/functions/precios-folletos/claude.ts
+import Anthropic from 'npm:@anthropic-ai/sdk'
+const cliente = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! })
+
+const r = await cliente.messages.create({
+  model: 'claude-opus-5',
+  max_tokens: 16000,
+  thinking: { type: 'adaptive' },
+  output_config: { format: { type: 'json_schema', schema: ESQUEMA } },
+  messages: [{ role: 'user', content: [...paginas, { type: 'text', text: INSTRUCCIONES }] }],
+})
+```
+
+El esquema pide, por producto: nombre, marca, precio, precio de lista, contenido, unidad,
+promoción y vigencia. Detalles que importan: `thinking: { type: 'adaptive' }` (nada de
+`budget_tokens`, ese devuelve 400); el PDF va como bloque `document` en base64 y las páginas
+sueltas como bloques `image`; **una página por llamada**, para que una página ilegible no
+tumbe el folleto entero; si queda largo, `.stream()` + `.finalMessage()` para no chocar con
+el timeout HTTP.
+
+El sku de folleto también es determinista (`folleto:<sha256 de nombre+contenido>`), así el
+mismo producto la semana entrante cae en la misma fila lógica y el histórico sirve. Todo
+entra con `fuente = 'folleto'` y su `vigente_hasta`, y la UI lo muestra siempre marcado: un
+precio de folleto nunca se presenta con la misma cara que uno de API.
+
+`ANTHROPIC_API_KEY` va en los secretos de Edge Functions (`npx supabase secrets set`), no en
+Vault — Vault solo guarda lo que necesita Postgres para llamarse a sí mismo.
+
+Costo: un folleto de ~20 páginas son unos 30–40K tokens de entrada; a US$5 por millón, del
+orden de **US$0.20 por corrida semanal**. Si con el tiempo molesta, `claude-haiku-4-5` hace
+este trabajo por una quinta parte.
+
+Esta fase es la más frágil del plan y va casi de última a propósito.
+
+## Fase 5 · Automatizar y pulir
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net with schema extensions;
+create extension if not exists supabase_vault with schema vault;
+```
+
+La URL del proyecto y la service key van en **Vault**, nunca en el SQL versionado: el archivo
+trae dos placeholders que se reemplazan una sola vez al pegarlo. Una función
+`public.disparar_precios(funcion, cuerpo)` `security definer` y **sin grants** (ni a `anon`
+ni a `authenticated`) arma el `net.http_post`; nadie con la clave publishable la puede
+invocar.
+
+```sql
+do $$ begin
+  perform cron.unschedule(jobname) from cron.job
+    where jobname in ('precios-tiendas','precios-folletos','precios-limpieza');
+end $$;
+select cron.schedule('precios-tiendas',  '0 11 * * *', $$select public.disparar_precios('precios-tiendas')$$);
+select cron.schedule('precios-folletos', '30 11 * * 1', $$select public.disparar_precios('precios-folletos')$$);
+select cron.schedule('precios-limpieza', '0 8 * * 0',
+  $$delete from public.precios where dia < current_date - 180$$);
+```
+
+El `do $$ ... $$` que desprograma primero es lo que deja pegar el archivo cuantas veces haga
+falta. `cron` corre en UTC: 11:00 UTC son las 6:00 a.m. de Bogotá.
+
+Y lo que el histórico ya venía guardando desde la Fase 1 se vuelve útil: un panel de
+corridas y un aviso "la leche bajó $800 en D1".
 
 ## Pruebas
 
-`src/mercado.test.ts`, con vitest, al estilo de `src/caja.test.ts`: solo lógica pura (el
+`src/mercado.test.ts`, con vitest, al estilo de `src/mensajes.test.ts`: solo lógica pura (el
 repo no tiene pruebas de componentes, ni jsdom, ni testing-library), fábricas de fixtures
-bajo un comentario de sección, y títulos en prosa española. Casos:
+bajo un comentario de sección, y títulos en prosa española.
 
-- `precioPorUnidad` con gramos, mililitros y unidades, incluido el caso de "6 unidades de
-  330ml".
-- `comparar` cuando una tienda no tiene el producto, cuando hay empate, y cuando el precio
-  más bajo es el menos fresco.
-- `frescura` en los tres estados, con una fecha fija.
-- `totalPorTienda` con productos faltantes.
-- `repartoOptimo`: que el ahorro nunca sea negativo y que cuente bien las paradas.
+- **`leerContenido`** — el caso con más trampas, el que decide si la comparación miente:
+  `'Leche Entera Colanta Bolsa x 1.100 ml'` → 1.1 l · `'900g'`, `'900 gr'`, `'x900G'` →
+  0.9 kg · `'1,5 L'` → 1.5 l · `'Huevos AA x 30 und'` → 30 un · `'Arroz Diana 500 g x 2'` →
+  1 kg · sin contenido → `null` · que `'2x1'` **no** se lea como contenido.
+- **`precioPorUnidad`** — que Éxito 1.100 ml a $4.800 pierda contra D1 900 ml a $4.100, pese
+  a costar más en absoluto. División por cero que no revienta.
+- **`puntajeCoincidencia`** — que "Leche Colanta 1L" prefiera "LECHE ENTERA COLANTA 1000ML"
+  sobre "LECHE ALPINA DESLACTOSADA 1L"; que la marca pese más que el sustantivo; estabilidad
+  ante tildes y mayúsculas.
+- **`frescura`** — cada fila de la tabla de arriba, con una fecha fija, incluido el folleto
+  vencido que **no** entra en los totales.
+- **`totalEnUnaTienda`** — cantidades; faltantes contados aparte y nunca sumados como cero.
+- **`mejorRepartido`** — con tope 1 da lo mismo que la mejor tienda única; con tope 2
+  encuentra el par óptimo; una tienda a la que le falte un producto no forma solución
+  completa; en empate gana la de menos paradas.
+- **`comparativo`** — la frase correcta cuando repartir gana, cuando no, y cuando el ahorro
+  queda bajo el umbral; canasta vacía y canasta sin ningún precio no revientan.
+- **Reducer** — `producto/vincular` reemplaza el vínculo de esa tienda en vez de duplicarlo;
+  `producto/borrar` limpia los ítems de lista que lo referencian; `lista/poner` con cantidad
+  0 quita el ítem.
+
+Lo que **no** se prueba con vitest: los adaptadores de Deno (dependen de HTTP real) y la
+extracción de Claude. Para esos, el instrumento de diagnóstico en producción es
+`precios_corridas`.
 
 ## Documentación
 
 El `README.md` es la memoria del proyecto y explica cada pieza con ese mismo tono. Se le
-agrega una sección **Mercado** al nivel de las otras: qué hace, cómo se configura en
-Supabase (pegar `supabase/precios.sql`, desplegar las dos funciones, poner los secretos),
-qué tienda se lee sola y cuál toca a mano, y cómo se vincula un producto la primera vez.
-También la línea nueva en el mapa de `src/` del final.
+agrega una sección **Mercado** al nivel de las otras: qué hace, cómo se configura en Supabase
+(pegar `supabase/precios.sql`, desplegar las funciones, poner los secretos), qué tienda se lee
+sola y cuál toca a mano, y cómo se vincula un producto la primera vez. Más la línea nueva en
+el mapa de `src/` del final.
 
 ## Verificación de punta a punta
 
@@ -260,33 +424,32 @@ También la línea nueva en el mapa de `src/` del final.
 2. `npm run build` — incluye `tsc --noEmit`. No hay linter; la única puerta es TypeScript en
    modo `strict` con `noUnusedLocals`, y el workflow de Pages corre `npm test` y
    `npm run build` antes de publicar: **si algo de esto falla, el deploy no sale**.
-3. Pegar `supabase/precios.sql` en el SQL Editor de Supabase y correrlo dos veces seguidas:
-   la segunda no debe fallar (idempotencia).
-4. `supabase functions deploy precios` e invocarla a mano una vez; revisar que `corridas`
-   registre la corrida y que `precios_hoy` tenga filas.
-5. `npm run dev`: crear un producto, vincularlo en dos tiendas, ver la comparación, armar una
-   lista y contrastar el total contra la suma hecha a mano.
-6. Abrir la app en el otro celular y confirmar que la canasta y la lista llegaron por sync.
-7. Esperar (o disparar a mano) la corrida de `pg_cron` y confirmar que el precio del día
-   siguiente entra como fila nueva, sin pisar la de ayer.
+3. Pegar `supabase/precios.sql` en el SQL Editor y correrlo **dos veces seguidas**: la
+   segunda no debe fallar.
+4. `npm run dev` con la Fase 1 sola: crear un producto, anotarle precios a mano en tres
+   tiendas, armar una lista y contrastar el total y la frase contra la suma hecha a mano.
+5. Abrir la app en el otro celular y confirmar que la canasta y la lista llegaron por sync.
+   Abrirla también en un celular **sin actualizar** y confirmar que no se rompe ni borra nada.
+6. Desplegar `precios-tiendas`, invocarla a mano y revisar que `precios_corridas` registre la
+   corrida y que `precios_ultimos` tenga filas.
+7. Disparar el cron a mano y confirmar que el precio del día siguiente entra como fila nueva,
+   sin pisar la de ayer.
 
 ## Lo que queda para después (fuera de este alcance)
 
 Conectar el Mercado con la Caja: al cerrar una lista, anotar el gasto en la categoría
 `mercado` y descontarlo del bolsillo. El terreno ya está abonado — `src/categorias.ts:4` ya
-tiene `mercado` 🛒 de primera, y `src/comercios.ts:10-13` ya reconoce EXITO, CARULLA, D1,
-ARA y MAKRO en los SMS del banco —, así que el día que se quiera, el puente es corto: un
-gasto con el total de la lista y el comercio ya categorizado.
+tiene `mercado` 🛒 de primera, y `src/comercios.ts:10-13` ya reconoce EXITO, CARULLA, D1, ARA
+y MAKRO en los SMS del banco —, así que el día que se quiera, el puente es corto.
 
 ## Riesgos, dichos de frente
 
-- **Los endpoints no están verificados.** La Fase 0 puede cambiar el alcance de las Fases 2
-  y 5. Lo que no cambia es el esquema ni la app: una tienda ilegible es una tienda manual.
-- **Las tiendas pueden cerrar la puerta** (bloqueo por bot, cambio de plataforma). Por eso la
-  bitácora `corridas` y el sello de frescura: la app tiene que *verse* desactualizada cuando
-  lo está, en vez de mentir con un precio viejo.
+- **Los endpoints no están verificados.** La Fase 0 puede cambiar el alcance de las Fases 2,
+  3 y 4. Lo que no cambia es el esquema ni la app: una tienda ilegible es una tienda manual.
+- **Las tiendas pueden cerrar la puerta** (bloqueo por bot, cambio de plataforma). Por eso
+  `precios_corridas` y el sello de frescura.
 - **Es raspado de sitios ajenos**, aunque sea del catálogo público y para uso personal de dos
-  personas. Una consulta por SKU vinculado al día, sin paralelismo agresivo: si algún día
-  molesta a alguien, que sea por poco.
+  personas. Una consulta por SKU vinculado al día: si algún día molesta a alguien, que sea
+  por poco.
 - **Los precios de Bogotá no son los de otra ciudad.** Queda fijo en `tiendas.ciudad` y se
   puede cambiar después sin tocar el modelo.

@@ -22,6 +22,21 @@ do $$ begin
   end if;
 end $$;
 
+-- Si se pegó el archivo sin cambiarlos, mejor reventar aquí que programar un cron
+-- que va a fallar en silencio todos los días contra 'https://TU-PROYECTO...'.
+do $$
+declare
+  v_url text;
+  v_key text;
+begin
+  select decrypted_secret into v_url from vault.decrypted_secrets where name = 'precios_url_proyecto';
+  select decrypted_secret into v_key from vault.decrypted_secrets where name = 'precios_service_key';
+  if v_url like '%TU-PROYECTO%' or v_key like 'PEGAR-AQUI%' then
+    raise exception
+      'Los secretos quedaron con el texto de ejemplo. Cambia los dos valores de arriba y vuelve a correr el archivo, borrando antes los que quedaron mal: delete from vault.secrets where name like ''precios_%%'';';
+  end if;
+end $$;
+
 -- ---------- el disparador ----------
 create or replace function public.disparar_precios(p_funcion text, p_cuerpo jsonb default '{}'::jsonb)
 returns bigint

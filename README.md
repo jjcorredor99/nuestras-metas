@@ -238,9 +238,11 @@ borra nada.
    precio a mano y se compara igual** — nada más se rompe.
 4. Para los folletos de D1 y Ara: `npx supabase secrets set ANTHROPIC_API_KEY=...` y
    `npx supabase functions deploy precios-folletos`. Son unos US$0.20 por corrida semanal.
-5. **Que corra solo**: pegar `supabase/precios-auto.sql` (pg_cron + pg_net + Vault), cambiando
-   antes la URL del proyecto y la service role key que pide arriba. Las llaves van en Vault,
-   nunca en el repo. Queda así, en hora de Bogotá:
+5. **Que corra solo**: pegar `supabase/precios-auto.sql` (pg_cron + pg_net + Vault). **Hay que
+   cambiarle los dos valores de arriba antes de correrlo** — la URL del proyecto y la service
+   role key —; si se pegan tal cual, el archivo revienta a propósito en vez de programar un
+   cron que fallaría en silencio. Las llaves van en Vault, nunca en el repo. Queda así, en hora
+   de Bogotá:
 
    | Cuándo | Qué |
    |---|---|

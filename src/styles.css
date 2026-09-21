@@ -113,6 +113,12 @@ a { color: var(--salvia-hondo); }
   transition: color 0.18s ease, background 0.18s ease;
 }
 .nav button.solo-escritorio { display: none; }
+/* Con nueve pestañas la barra va justa: que el texto se recorte antes de montarse encima del vecino. */
+.nav button > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 460px) {
+  .nav { padding-left: 2px; padding-right: 2px; }
+  .nav button { font-size: 0.6rem; min-width: 38px; padding: 6px 2px; gap: 2px; }
+}
 .nav button .ico {
   display: flex; line-height: 1;
   opacity: 0.7;

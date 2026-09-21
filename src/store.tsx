@@ -14,6 +14,10 @@ import type {
   Bolsillo,
   AjusteBolsillo,
   Ingreso,
+  Producto,
+  Vinculo,
+  ListaCompras,
+  TiendaId,
 } from './types'
 import { claveComercio } from './comercios'
 import { quitarCategorias } from './caja'
@@ -55,6 +59,8 @@ export function estadoInicial(): Estado {
     fotos: [],
     bolsillos: [],
     ingresos: [],
+    productos: [],
+    listas: [],
   }
 }
 
@@ -116,11 +122,22 @@ export type Accion =
   | { tipo: 'ingreso/agregar'; ingreso: Omit<Ingreso, 'id'> }
   | { tipo: 'ingreso/editar'; ingreso: Ingreso }
   | { tipo: 'ingreso/borrar'; id: string }
+  | { tipo: 'producto/agregar'; producto: Omit<Producto, 'id' | 'vinculos' | 'activo'> }
+  | { tipo: 'producto/editar'; producto: Producto }
+  | { tipo: 'producto/borrar'; id: string }
+  | { tipo: 'producto/vincular'; id: string; vinculo: Vinculo }
+  | { tipo: 'producto/desvincular'; id: string; tienda: TiendaId }
+  | { tipo: 'lista/crear'; nombre: string }
+  | { tipo: 'lista/editar'; lista: ListaCompras }
+  | { tipo: 'lista/borrar'; id: string }
+  | { tipo: 'lista/poner'; id: string; productoId: string; cantidad: number }
+  | { tipo: 'lista/marcar'; id: string; productoId: string; listo: boolean }
+  | { tipo: 'lista/limpiar'; id: string }
   | { tipo: 'importar'; estado: Estado }
   | { tipo: 'reiniciar' }
   | { tipo: 'sync/aplicar'; filas: Fila[] }
 
-function reducer(s: Estado, a: Accion): Estado {
+export function reducer(s: Estado, a: Accion): Estado {
   switch (a.tipo) {
     case 'perfil':
       return { ...s, perfil: { ...s.perfil, ...a.perfil } }
@@ -317,6 +334,74 @@ function reducer(s: Estado, a: Accion): Estado {
     case 'ingreso/borrar':
       return { ...s, ingresos: s.ingresos.filter((i) => i.id !== a.id) }
 
+    case 'producto/agregar':
+      return { ...s, productos: [...s.productos, { ...a.producto, id: uid(), vinculos: [], activo: true }] }
+    case 'producto/editar':
+      return { ...s, productos: s.productos.map((p) => (p.id === a.producto.id ? a.producto : p)) }
+    case 'producto/borrar':
+      return {
+        ...s,
+        productos: s.productos.filter((p) => p.id !== a.id),
+        // Un producto borrado no puede quedar de fantasma en las listas.
+        listas: s.listas.map((l) => ({ ...l, items: l.items.filter((i) => i.productoId !== a.id) })),
+      }
+    case 'producto/vincular':
+      return {
+        ...s,
+        productos: s.productos.map((p) =>
+          p.id === a.id
+            ? { ...p, vinculos: [...p.vinculos.filter((v) => v.tienda !== a.vinculo.tienda), a.vinculo] }
+            : p,
+        ),
+      }
+    case 'producto/desvincular':
+      return {
+        ...s,
+        productos: s.productos.map((p) =>
+          p.id === a.id ? { ...p, vinculos: p.vinculos.filter((v) => v.tienda !== a.tienda) } : p,
+        ),
+      }
+
+    case 'lista/crear':
+      return {
+        ...s,
+        listas: [{ id: uid(), nombre: a.nombre || 'Mercado', creadaEn: hoy(), items: [] }, ...s.listas],
+      }
+    case 'lista/editar':
+      return { ...s, listas: s.listas.map((l) => (l.id === a.lista.id ? a.lista : l)) }
+    case 'lista/borrar':
+      return { ...s, listas: s.listas.filter((l) => l.id !== a.id) }
+    case 'lista/poner':
+      return {
+        ...s,
+        listas: s.listas.map((l) => {
+          if (l.id !== a.id) return l
+          // Cantidad 0 quita el producto de la lista; no hay por qué guardar ceros.
+          if (a.cantidad <= 0) return { ...l, items: l.items.filter((i) => i.productoId !== a.productoId) }
+          const existe = l.items.some((i) => i.productoId === a.productoId)
+          return {
+            ...l,
+            items: existe
+              ? l.items.map((i) => (i.productoId === a.productoId ? { ...i, cantidad: a.cantidad } : i))
+              : [...l.items, { productoId: a.productoId, cantidad: a.cantidad, listo: false }],
+          }
+        }),
+      }
+    case 'lista/marcar':
+      return {
+        ...s,
+        listas: s.listas.map((l) =>
+          l.id === a.id
+            ? { ...l, items: l.items.map((i) => (i.productoId === a.productoId ? { ...i, listo: a.listo } : i)) }
+            : l,
+        ),
+      }
+    case 'lista/limpiar':
+      return {
+        ...s,
+        listas: s.listas.map((l) => (l.id === a.id ? { ...l, items: l.items.filter((i) => !i.listo) } : l)),
+      }
+
     case 'importar':
       return { ...estadoInicial(), ...a.estado }
     case 'reiniciar':
@@ -337,6 +422,8 @@ const COLECCION: Record<Exclude<Fila['tipo'], 'perfil'>, keyof Omit<Estado, 'ver
   foto: 'fotos',
   bolsillo: 'bolsillos',
   ingreso: 'ingresos',
+  producto: 'productos',
+  lista: 'listas',
 }
 
 function aplicarFilas(s: Estado, filas: Fila[]): Estado {
@@ -379,6 +466,8 @@ export function filasDeEstado(e: Estado): { id: string; tipo: Fila['tipo']; data
     ...e.fotos.map((x) => ({ id: x.id, tipo: 'foto' as const, data: x })),
     ...e.bolsillos.map((x) => ({ id: x.id, tipo: 'bolsillo' as const, data: x })),
     ...e.ingresos.map((x) => ({ id: x.id, tipo: 'ingreso' as const, data: x })),
+    ...e.productos.map((x) => ({ id: x.id, tipo: 'producto' as const, data: x })),
+    ...e.listas.map((x) => ({ id: x.id, tipo: 'lista' as const, data: x })),
   ]
 }
 

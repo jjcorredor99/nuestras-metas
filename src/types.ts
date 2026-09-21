@@ -164,6 +164,50 @@ export interface Foto {
   // la imagen vive en IndexedDB con este mismo id
 }
 
+export type TiendaId = 'exito' | 'carulla' | 'makro' | 'd1' | 'ara'
+
+/** En qué se compara un producto: por litro, por kilo o por unidad. */
+export type Unidad = 'l' | 'kg' | 'un'
+
+/**
+ * Un producto de la canasta ↔ el SKU con el que lo llama una tienda.
+ * Se vincula una vez a mano porque ninguna tienda lo llama igual, y sin el
+ * contenido real de *esa* presentación la comparación mentiría: la bolsa de
+ * Éxito es de 1.100 ml y la de D1 de 900.
+ */
+export interface Vinculo {
+  tienda: TiendaId
+  sku: string
+  nombre: string // como lo escribe la tienda
+  contenido: number // 1.1 = la bolsa de 1.100 ml
+  unidad: Unidad
+  confirmado: boolean // lo tocó una persona; si no, lo propuso la app
+}
+
+export interface Producto {
+  id: string
+  nombre: string // 'Leche Colanta 1L', como lo dicen ustedes
+  emoji: string
+  unidad: Unidad // en qué se compara
+  contenidoRef: number // 1 = un litro
+  habitual: number // cuántos suelen llevar
+  vinculos: Vinculo[]
+  activo: boolean
+}
+
+export interface ItemLista {
+  productoId: string
+  cantidad: number
+  listo: boolean
+}
+
+export interface ListaCompras {
+  id: string
+  nombre: string
+  creadaEn: string
+  items: ItemLista[]
+}
+
 export interface Estado {
   version: 1
   perfil: Perfil
@@ -175,4 +219,6 @@ export interface Estado {
   fotos: Foto[]
   bolsillos: Bolsillo[]
   ingresos: Ingreso[]
+  productos: Producto[]
+  listas: ListaCompras[]
 }

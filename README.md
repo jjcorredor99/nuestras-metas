@@ -14,6 +14,9 @@ dispositivo (nada sale a internet).
 - **Gastos**: quién pagó, si es compartido o personal, categoría, y el balance del mes
   (quién le debe a quién por lo compartido). Los SMS del banco se anotan solos con un Atajo del
   iPhone, o pegando el mensaje con el botón 📩.
+- **Mercado**: la canasta de lo que compramos siempre, con el precio en Éxito, Carulla, Makro,
+  D1 y Ara comparado por litro o por kilo, y una lista de compras que dice cuánto cuesta en cada
+  parte y si vale la pena hacer dos paradas.
 - **Facturas**: fijas con día de vencimiento. Se marcan pagadas cada mes y avisan cuando
   falten 3 días o menos (si activan las notificaciones).
 - **Deudas**: cada deuda con su saldo, abonos y progreso. Las ordena por método bola de nieve
@@ -182,6 +185,73 @@ Al publicar esta versión: abran la app en los dos celulares (cerrar y volver a 
 de armar la caja, para que ninguno siga con la versión anterior (un celular sin actualizar muestra
 "Fuera de casa" como Otros).
 
+## Mercado: precios de las cinco tiendas
+
+La Caja dice en qué se fue la plata. El Mercado es lo que falta para decidir *antes*: el mismo
+producto no cuesta igual en Éxito, Carulla, Makro, D1 y Ara.
+
+### Cómo se usa
+
+1. **La canasta**: agreguen lo que compran siempre (la leche, el arroz, el aceite). De cada uno
+   se dice en qué se compara: litros, kilos o unidades.
+2. **Vincular, una sola vez por tienda**: ninguna tienda llama igual al mismo producto, así que
+   se busca y se toca el correcto. Ahí queda guardado el SKU y el contenido real de *esa*
+   presentación. Es lo que hace honesta la comparación: la bolsa de Éxito es de 1.100 ml y la de
+   D1 de 900, y la barata en la etiqueta puede ser la cara por litro.
+3. **La lista**: se marcan productos y cantidades. Arriba sale la cuenta: *"Todo en Éxito:
+   $184.300. Repartido entre D1 y Carulla: $161.900 — ahorran $22.400 por ir a dos sitios."*
+   Si el ahorro no pasa de unos $5.000 (o del 3%), lo dice también: no vale la pena cruzar la
+   ciudad por eso.
+
+Todo precio sale con su fecha y de dónde vino. Uno del folleto no se muestra con la misma cara
+que uno de la API, y una oferta de folleto vencida **no entra en las cuentas**. La app tiene que
+verse desactualizada cuando lo está, en vez de mentir en el pasillo del supermercado.
+
+La canasta y las listas se sincronizan entre los dos celulares por la misma tabla `items` de
+siempre. Un celular con una versión vieja de la app no ve el Mercado, pero tampoco se rompe ni
+borra nada.
+
+### Configuración (una sola vez)
+
+1. Supabase → SQL Editor → New query → pegar `supabase/precios.sql` → Run. **Con esto ya
+   funciona**: la comparación y la lista sirven con los precios que ustedes anoten a mano.
+2. Para que los precios lleguen solos, desplegar las funciones:
+
+   ```bash
+   npx supabase functions deploy precios-descubrir
+   npx supabase functions deploy precios-tiendas
+   npx supabase functions deploy precios-buscar
+   ```
+
+3. **Descubrimiento**: llamar una vez a `precios-descubrir`. Prueba los dos caminos de cada
+   tienda y guarda en `tiendas.config` cuál respondió.
+
+   ```bash
+   curl -X POST https://TU-PROYECTO.supabase.co/functions/v1/precios-descubrir \
+     -H "Authorization: Bearer <service-role-key>"
+   ```
+
+   Ninguno de esos caminos está verificado: se escribieron sin poder salir a internet. Lo que
+   responda esta llamada decide qué tienda se lee sola. **La que no responda se queda en
+   precio a mano y se compara igual** — nada más se rompe.
+4. Para automatizarlo, descomentar el bloque del final de `supabase/precios.sql` (pg_cron +
+   pg_net + Vault). Las llaves van en Vault, no en el repo. Corre diario a las 6 a.m. de Bogotá.
+5. Para los folletos de D1 y Ara: `npx supabase secrets set ANTHROPIC_API_KEY=...` y
+   `npx supabase functions deploy precios-folletos`. Son unos US$0.20 por corrida semanal.
+
+### Cómo se alimenta la tabla
+
+El robot no le lee los datos a nadie: refresca los SKU que ya están en `precios`. Al vincular un
+producto, la búsqueda guarda lo que encontró, y de ahí en adelante el robot lo mantiene al día.
+Lo que dejen de seguir se cae solo a los 60 días.
+
+Si una tienda se cae, queda anotada en `precios_corridas` y la app lo dice de frente ("Makro no
+se pudo leer desde el martes"). Para D1 y Ara hay un segundo camino cuando el folleto no se deja
+bajar: le toman una foto en la tienda y la lee Claude, con el mismo código.
+
+La matemática (precio por unidad, frescura, totales, el reparto óptimo entre tiendas) vive en
+`src/mercado.ts` y está cubierta con pruebas: `npm test`.
+
 ## Estructura
 
 ```
@@ -193,10 +263,18 @@ src/
   categorias.ts   categorías de gasto
   mensajes.ts     lee el SMS del banco y saca el gasto o el ingreso (con pruebas)
   caja.ts         bolsillos, resumen del mes y comparación con el mes pasado (con pruebas)
+  mercado.ts      precio por unidad, frescura y el reparto entre tiendas (con pruebas)
+  precios.ts      lee los precios de Supabase y anota los que ustedes ven en el estante
   comercios.ts    comercio -> categoría, y lo que ustedes le enseñan
   entrantes.tsx   bandeja de mensajes que mandó el Atajo del celular
   enlace.ts       mensajes que llegan por la URL (#gastos?texto=...)
   components/     ui (modal, campos, barras, confeti, toast), IngresoModal, ArmarCaja,
                   DesdeMensaje, AtajoSms, Cuenta
-  pages/          Inicio, Caja, Gastos, Facturas, Deudas, Retos, Metas, Muro, Ajustes
+  pages/          Inicio, Caja, Gastos, Mercado, Facturas, Deudas, Retos, Metas, Muro, Ajustes
+
+supabase/
+  schema.sql      hogares, miembros, items y la RLS
+  mensajes.sql    la bandeja de los SMS del banco
+  precios.sql     tiendas, precios con histórico y la bitácora del robot
+  functions/      las Edge Functions que traen los precios (Deno)
 ```

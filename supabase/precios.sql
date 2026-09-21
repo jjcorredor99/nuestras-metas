@@ -146,52 +146,11 @@ end $$;
 revoke all on function public.precio_manual(text, text, numeric, numeric, text, text) from public, anon;
 grant execute on function public.precio_manual(text, text, numeric, numeric, text, text) to authenticated;
 
--- ============================================================================
--- De aquí para abajo es para automatizar el robot. Se puede dejar para después:
--- la app funciona con los precios anotados a mano sin nada de esto.
--- ============================================================================
-
--- create extension if not exists pg_cron;
--- create extension if not exists pg_net with schema extensions;
--- create extension if not exists supabase_vault with schema vault;
+-- ---------- que corra solo ----------
+-- Con lo de arriba el Mercado ya funciona: la comparación y la lista sirven con
+-- los precios que ustedes anoten a mano.
 --
--- -- Las llaves NO van en este archivo (que está en el repo): van en Vault.
--- -- Reemplacen los dos valores de abajo una sola vez.
--- do $$ begin
---   if not exists (select 1 from vault.secrets where name = 'precios_url_proyecto') then
---     perform vault.create_secret('https://TU-PROYECTO.supabase.co', 'precios_url_proyecto');
---   end if;
---   if not exists (select 1 from vault.secrets where name = 'precios_service_key') then
---     perform vault.create_secret('PEGAR-AQUI-LA-SERVICE-ROLE-KEY', 'precios_service_key');
---   end if;
--- end $$;
---
--- create or replace function public.disparar_precios(p_funcion text, p_cuerpo jsonb default '{}'::jsonb)
--- returns bigint
--- language plpgsql security definer set search_path = public, extensions as $$
--- declare v_url text; v_key text; v_id bigint;
--- begin
---   select decrypted_secret into v_url from vault.decrypted_secrets where name = 'precios_url_proyecto';
---   select decrypted_secret into v_key from vault.decrypted_secrets where name = 'precios_service_key';
---   if v_url is null or v_key is null then raise exception 'Faltan los secretos en Vault'; end if;
---   select net.http_post(
---     url := v_url || '/functions/v1/' || p_funcion,
---     headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_key),
---     body := p_cuerpo,
---     timeout_milliseconds := 150000
---   ) into v_id;
---   return v_id;
--- end $$;
---
--- -- Sin grants: nadie con la clave publishable puede dispararla.
--- revoke all on function public.disparar_precios(text, jsonb) from public, anon, authenticated;
---
--- -- cron corre en UTC: 11:00 UTC son las 6:00 a.m. de Bogotá.
--- do $$ begin
---   perform cron.unschedule(jobname) from cron.job
---     where jobname in ('precios-tiendas', 'precios-folletos', 'precios-limpieza');
--- end $$;
--- select cron.schedule('precios-tiendas',  '0 11 * * *',  $cron$select public.disparar_precios('precios-tiendas')$cron$);
--- select cron.schedule('precios-folletos', '30 11 * * 1', $cron$select public.disparar_precios('precios-folletos')$cron$);
--- select cron.schedule('precios-limpieza', '0 8 * * 0',
---   $cron$delete from public.precios where dia < current_date - 180$cron$);
+-- Para que los precios lleguen solos hacen falta dos cosas más, en este orden:
+--   1. Desplegar las funciones (ver el README).
+--   2. Pegar supabase/precios-auto.sql, que programa el cron con pg_cron + pg_net.
+--      Las llaves van en Vault, no en este repo.

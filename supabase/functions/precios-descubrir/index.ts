@@ -1,12 +1,12 @@
-import { cliente, guardarConfig, tiendasPor } from '../_compartido/db.ts'
+import { abrirCorrida, cerrarCorrida, cliente, guardarConfig, tiendasPor } from '../_compartido/db.ts'
 import { dominioDe, ESTRATEGIAS, type Estrategia } from '../_compartido/vtex.ts'
 import { CORS, responder, traer } from '../_compartido/red.ts'
 import type { Config, Tienda } from '../_compartido/tipos.ts'
 
 /**
- * El checkpoint de la fase 0. Corre desde la red de Supabase (no desde un portátil
- * con proxy) y contesta la única pregunta que el plan no pudo verificar:
- * ¿se deja leer esta tienda, y por cuál camino?
+ * Contesta la única pregunta que el plan no pudo verificar: ¿se deja leer esta
+ * tienda, y por cuál camino? Corre desde la red de Supabase, no desde un portátil
+ * con proxy.
  *
  *   curl -X POST https://TU-PROYECTO.supabase.co/functions/v1/precios-descubrir \
  *     -H "Authorization: Bearer <service-role-key>"
@@ -14,7 +14,15 @@ import type { Config, Tienda } from '../_compartido/tipos.ts'
  * Lo que responda queda guardado en `tiendas.config.estrategia`, que es lo que
  * después usa el adaptador. La tienda que no responda se queda en 'manual': se
  * compara igual, con el precio que ustedes anoten.
+ *
+ * Programado cada lunes (supabase/precios-auto.sql) deja de ser un trámite de una
+ * vez y pasa a ser mantenimiento: si una tienda cambia de plataforma o empieza a
+ * cerrar la puerta, el lunes siguiente se vuelve a probar y se guarda el camino
+ * que sí sirva, antes de la corrida diaria. Cada probada queda en
+ * `precios_corridas`, porque algo que corre solo y no deja rastro no se puede
+ * revisar después.
  */
+const FUNCION = 'precios-descubrir'
 const PRUEBA = 'leche entera'
 
 interface Hallazgo {
@@ -111,13 +119,27 @@ Deno.serve(async (req) => {
   const conFolleto = await tiendasPor(db, 'folleto')
 
   const hallazgos: Hallazgo[] = []
+
   for (const t of conApi) {
-    const suyos = await probarApi(t)
-    hallazgos.push(...suyos)
-    const gana = suyos.find((h) => h.veredicto === 'se deja leer')
-    if (gana) await guardarConfig(db, t.id, { ...(t.config ?? {}), estrategia: gana.camino })
+    const corrida = await abrirCorrida(db, t.id, FUNCION)
+    try {
+      const suyos = await probarApi(t)
+      hallazgos.push(...suyos)
+      const gana = suyos.find((h) => h.veredicto === 'se deja leer')
+      // Si cambió de camino (o apareció uno), queda guardado antes de la corrida diaria.
+      if (gana) await guardarConfig(db, t.id, { ...(t.config ?? {}), estrategia: gana.camino })
+      await cerrarCorrida(db, corrida, !!gana, 0, gana ? undefined : 'Ningún camino respondió')
+    } catch (e) {
+      await cerrarCorrida(db, corrida, false, 0, e instanceof Error ? e.message : String(e))
+    }
   }
-  for (const t of conFolleto) hallazgos.push(await probarFolleto(t))
+
+  for (const t of conFolleto) {
+    const corrida = await abrirCorrida(db, t.id, FUNCION)
+    const h = await probarFolleto(t)
+    hallazgos.push(h)
+    await cerrarCorrida(db, corrida, h.veredicto === 'se deja leer', 0, String(h.estado))
+  }
 
   // El resumen que decide el alcance de las fases siguientes.
   const resumen = hallazgos

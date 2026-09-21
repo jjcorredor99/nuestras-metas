@@ -223,6 +223,8 @@ borra nada.
    npx supabase functions deploy precios-buscar
    ```
 
+   (Hace falta el proyecto enlazado: `npx supabase link --project-ref TU-PROYECTO`.)
+
 3. **Descubrimiento**: llamar una vez a `precios-descubrir`. Prueba los dos caminos de cada
    tienda y guarda en `tiendas.config` cuál respondió.
 
@@ -234,10 +236,24 @@ borra nada.
    Ninguno de esos caminos está verificado: se escribieron sin poder salir a internet. Lo que
    responda esta llamada decide qué tienda se lee sola. **La que no responda se queda en
    precio a mano y se compara igual** — nada más se rompe.
-4. Para automatizarlo, descomentar el bloque del final de `supabase/precios.sql` (pg_cron +
-   pg_net + Vault). Las llaves van en Vault, no en el repo. Corre diario a las 6 a.m. de Bogotá.
-5. Para los folletos de D1 y Ara: `npx supabase secrets set ANTHROPIC_API_KEY=...` y
+4. Para los folletos de D1 y Ara: `npx supabase secrets set ANTHROPIC_API_KEY=...` y
    `npx supabase functions deploy precios-folletos`. Son unos US$0.20 por corrida semanal.
+5. **Que corra solo**: pegar `supabase/precios-auto.sql` (pg_cron + pg_net + Vault), cambiando
+   antes la URL del proyecto y la service role key que pide arriba. Las llaves van en Vault,
+   nunca en el repo. Queda así, en hora de Bogotá:
+
+   | Cuándo | Qué |
+   |---|---|
+   | lunes 5:30 a.m. | `precios-descubrir` — vuelve a probar por dónde se deja leer cada tienda |
+   | todos los días 6:00 a.m. | `precios-tiendas` — refresca lo que ya se sigue |
+   | lunes 6:30 a.m. | `precios-folletos` — el folleto de la semana de D1 y Ara |
+   | domingos 3:00 a.m. | limpieza de precios de más de 180 días |
+
+   El descubridor va de primero el lunes a propósito: es el que arregla el camino. Si una
+   tienda cambió de plataforma el fin de semana, la corrida de las 6:00 ya sale con la
+   estrategia nueva en vez de fallar toda la semana. Cada probada queda en
+   `precios_corridas` — algo que corre solo y no deja rastro no se puede revisar después.
+   Para disparar cualquiera a mano: `select public.disparar_precios('precios-descubrir');`
 
 ### Cómo se alimenta la tabla
 
@@ -276,5 +292,6 @@ supabase/
   schema.sql      hogares, miembros, items y la RLS
   mensajes.sql    la bandeja de los SMS del banco
   precios.sql     tiendas, precios con histórico y la bitácora del robot
+  precios-auto.sql  el cron que hace que el robot corra solo
   functions/      las Edge Functions que traen los precios (Deno)
 ```

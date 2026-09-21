@@ -3,14 +3,24 @@ import type { Adaptador, Config, PrecioCrudo, TiendaId, Unidad } from './tipos.t
 
 /**
  * Éxito, Carulla y Makro corren sobre VTEX, así que es un solo adaptador
- * parametrizado por dominio. OJO: ninguno de estos caminos está verificado —
- * el plan los prueba en orden con `precios-descubrir` y anota en
- * `tiendas.config.estrategia` cuál respondió.
+ * parametrizado por dominio.
+ *
+ * Éxito y Carulla ya están verificados contra las tiendas de verdad. Con Makro
+ * fallaron los dos caminos, y lo más probable es que sea el dominio: el nombre
+ * con el que vende en Colombia no lo sé de memoria, y adivinarlo una vez más no
+ * es forma. Por eso aquí va una lista de candidatos y el descubridor los prueba
+ * todos, guardando en `tiendas.config.dominio` el que responda. Adivinar una vez
+ * es una apuesta; probar cinco y anotar cuál sirvió es una respuesta.
  */
-export const DOMINIOS: Record<string, string> = {
-  exito: 'www.exito.com',
-  carulla: 'www.carulla.com',
-  makro: 'www.makro.com.co',
+export const DOMINIOS: Record<string, string[]> = {
+  exito: ['www.exito.com'],
+  carulla: ['www.carulla.com'],
+  makro: ['www.makro.com.co', 'makro.com.co', 'tienda.makro.com.co', 'tiendas.makro.com.co', 'www.makrovirtual.com'],
+}
+
+/** Los dominios a probar: primero el que ya está guardado, después los candidatos. */
+export function dominiosCandidatos(tienda: TiendaId, cfg: Config): string[] {
+  return [...new Set([cfg.dominio, ...(DOMINIOS[tienda] ?? [])].filter((d): d is string => !!d))]
 }
 
 interface OfertaVtex {
@@ -106,7 +116,7 @@ const urlSkus = (dominio: string, skus: string[], canal?: string): string => {
 }
 
 export function dominioDe(tienda: TiendaId, cfg: Config): string {
-  const d = cfg.dominio ?? DOMINIOS[tienda]
+  const d = dominiosCandidatos(tienda, cfg)[0]
   if (!d) throw new ErrorTienda(`No sé con qué dominio hablarle a ${tienda}`, false)
   return d
 }

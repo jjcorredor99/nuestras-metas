@@ -233,11 +233,29 @@ borra nada.
      -H "Authorization: Bearer <service-role-key>"
    ```
 
-   Ninguno de esos caminos está verificado: se escribieron sin poder salir a internet. Lo que
-   responda esta llamada decide qué tienda se lee sola. **La que no responda se queda en
-   precio a mano y se compara igual** — nada más se rompe.
+   Así está la cosa, según la primera corrida contra las tiendas de verdad:
+
+   | Tienda | Estado |
+   |---|---|
+   | Éxito | ✅ responde |
+   | Carulla | ✅ responde |
+   | Makro | ❓ no respondió; el descubridor prueba varios dominios candidatos y guarda el que sirva |
+   | D1 y Ara | 📰 no tienen API; van por folleto (o por la foto desde la app) |
+
+   **La tienda que no responda se queda en precio a mano y se compara igual** — nada más se
+   rompe. El descubridor vuelve a intentarlo cada lunes, así que si Makro aparece después, se
+   engancha sola.
 4. Para los folletos de D1 y Ara: `npx supabase secrets set ANTHROPIC_API_KEY=...` y
    `npx supabase functions deploy precios-folletos`. Son unos US$0.20 por corrida semanal.
+   Además hay que decirle dónde está el folleto de cada una:
+
+   ```sql
+   update public.tiendas set config = config || '{"folleto":"https://..."}'::jsonb where id = 'd1';
+   ```
+
+   Sin esa URL no hay corrida automática, pero el camino de la foto **sí funciona desde ya**:
+   en Mercado, el botón "Foto del folleto" manda las fotos que tomen en la tienda y las lee
+   Claude, sin configurar nada.
 5. **Que corra solo**: pegar `supabase/precios-auto.sql` (pg_cron + pg_net + Vault). **Hay que
    cambiarle los dos valores de arriba antes de correrlo** — la URL del proyecto y la service
    role key —; si se pegan tal cual, el archivo revienta a propósito en vez de programar un

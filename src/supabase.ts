@@ -19,10 +19,33 @@ export interface Hogar {
   creado_en: string
 }
 
-export type TipoItem = 'perfil' | 'gasto' | 'factura' | 'deuda' | 'reto' | 'meta' | 'foto' | 'bolsillo' | 'ingreso'
+export type TipoItem =
+  | 'perfil'
+  | 'gasto'
+  | 'factura'
+  | 'deuda'
+  | 'reto'
+  | 'meta'
+  | 'foto'
+  | 'bolsillo'
+  | 'ingreso'
+  | 'producto'
+  | 'lista'
 
 /** Los tipos que esta versión entiende. Lo demás se ignora sin tocarlo (ni se borra). */
-export const TIPOS_ITEM: readonly TipoItem[] = ['perfil', 'gasto', 'factura', 'deuda', 'reto', 'meta', 'foto', 'bolsillo', 'ingreso']
+export const TIPOS_ITEM: readonly TipoItem[] = [
+  'perfil',
+  'gasto',
+  'factura',
+  'deuda',
+  'reto',
+  'meta',
+  'foto',
+  'bolsillo',
+  'ingreso',
+  'producto',
+  'lista',
+]
 
 export interface Fila {
   hogar_id: string
@@ -32,6 +55,39 @@ export interface Fila {
   borrado: boolean
   actualizado_en: string
   actualizado_por?: string | null
+}
+
+/**
+ * Un precio de catálogo tal como lo dejó el robot (o como lo anotaron a mano).
+ * No es del hogar: vive en sus propias tablas y lo lee cualquiera con sesión.
+ */
+export interface FilaPrecio {
+  tienda_id: string
+  sku: string
+  dia: string
+  nombre: string
+  marca: string | null
+  precio: number
+  precio_lista: number | null
+  contenido: number | null
+  unidad: string | null
+  promocion: string | null
+  vigente_hasta: string | null
+  url: string | null
+  imagen: string | null
+  fuente: 'api' | 'folleto' | 'manual'
+  capturado_en: string
+}
+
+/** Bitácora de las corridas del robot: sirve para decir "Makro no se pudo leer desde el martes". */
+export interface FilaCorrida {
+  tienda_id: string
+  funcion: string
+  iniciado_en: string
+  terminado_en: string | null
+  ok: boolean | null
+  filas: number
+  error: string | null
 }
 
 /** Un mensaje del banco tal como lo dejó el Atajo del celular. */

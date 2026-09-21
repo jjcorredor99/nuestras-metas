@@ -6,6 +6,7 @@ import { capturarMensajeDelEnlace } from './enlace'
 import { Onboarding } from './pages/Onboarding'
 import { Inicio } from './pages/Inicio'
 import { Gastos } from './pages/Gastos'
+import { Mercado } from './pages/Mercado'
 import { Facturas } from './pages/Facturas'
 import { Deudas } from './pages/Deudas'
 import { Retos } from './pages/Retos'
@@ -19,6 +20,7 @@ const PAGINAS = [
   { id: 'inicio', texto: 'Inicio' },
   { id: 'caja', texto: 'Caja' },
   { id: 'gastos', texto: 'Gastos' },
+  { id: 'mercado', texto: 'Mercado' },
   { id: 'facturas', texto: 'Facturas' },
   { id: 'deudas', texto: 'Deudas' },
   { id: 'retos', texto: 'Retos' },
@@ -81,6 +83,7 @@ function Shell() {
         {pagina === 'inicio' && <Inicio ir={ir} />}
         {pagina === 'caja' && <Caja />}
         {pagina === 'gastos' && <Gastos />}
+        {pagina === 'mercado' && <Mercado />}
         {pagina === 'facturas' && <Facturas />}
         {pagina === 'deudas' && <Deudas />}
         {pagina === 'retos' && <Retos />}

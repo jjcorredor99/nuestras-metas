@@ -46,7 +46,7 @@ function Sello({ p }: { p: PrecioVista }) {
 export function Mercado() {
   const { estado, dispatch } = useStore()
   const { perfil, productos, listas } = estado
-  const { precios, caidas, faltaSql, recargar, anotarPrecio, buscar } = usePrecios()
+  const { precios, caidas, faltaSql, recargar, anotarPrecio, buscar, leerFolleto } = usePrecios()
   const { mostrar, Toast } = useToast()
 
   const [pestana, setPestana] = useState<'canasta' | 'lista'>('canasta')
@@ -133,6 +133,8 @@ export function Mercado() {
         </div>
       )}
 
+      {pestana === 'canasta' && <Folleto onLeer={leerFolleto} onAviso={mostrar} />}
+
       {pestana === 'canasta' ? (
         <>
           <div className="grid2">
@@ -186,6 +188,7 @@ export function Mercado() {
         <ListaDeCompras
           lista={listaActiva}
           productos={productos}
+          vistas={canasta}
           cuentas={cuentas}
           paradas={paradas}
           setParadas={setParadas}
@@ -291,11 +294,85 @@ export function Mercado() {
   )
 }
 
+// ---------- la foto del folleto ----------
+
+const leerArchivo = (f: File): Promise<string> =>
+  new Promise((listo, falla) => {
+    const lector = new FileReader()
+    lector.onload = () => listo(String(lector.result))
+    lector.onerror = () => falla(new Error('No se pudo leer la foto'))
+    lector.readAsDataURL(f)
+  })
+
+/**
+ * D1 y Ara no tienen tienda en línea de verdad. Si el robot no alcanzó el folleto
+ * de la semana, ustedes le toman una foto en el pasillo y lo lee Claude.
+ */
+function Folleto({
+  onLeer,
+  onAviso,
+}: {
+  onLeer: (tienda: TiendaId, imagenes: string[]) => Promise<string | null>
+  onAviso: (m: string) => void
+}) {
+  const [tienda, setTienda] = useState<TiendaId | null>(null)
+  const [leyendo, setLeyendo] = useState(false)
+
+  const soloFolleto = TIENDAS.filter((t) => t.fuente === 'folleto')
+
+  const subir = async (lista: FileList | null) => {
+    if (!lista || !tienda) return
+    setLeyendo(true)
+    try {
+      const imagenes = await Promise.all([...lista].slice(0, 6).map(leerArchivo))
+      const error = await onLeer(tienda, imagenes)
+      onAviso(error ?? 'Folleto leído 📰')
+    } catch (e) {
+      onAviso(e instanceof Error ? e.message : 'No se pudo leer la foto')
+    } finally {
+      setLeyendo(false)
+      setTienda(null)
+    }
+  }
+
+  return (
+    <div className="tarjeta fila entre envolver">
+      <div className="col" style={{ flex: 1 }}>
+        <span className="negrita">📰 Foto del folleto</span>
+        <span className="chica suave">
+          {soloFolleto.map((t) => t.nombre).join(' y ')} no tienen tienda en línea. Si están allá, tómenle una foto
+          al folleto y la app saca los precios.
+        </span>
+      </div>
+      <div className="fila" style={{ gap: 6 }}>
+        {soloFolleto.map((t) => (
+          <label key={t.id} className="btn chico secundario" style={{ cursor: 'pointer' }}>
+            {leyendo && tienda === t.id ? 'Leyendo…' : t.nombre}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              disabled={leyendo}
+              onClick={() => setTienda(t.id)}
+              onChange={(e) => {
+                void subir(e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ---------- la lista de compras ----------
 
 function ListaDeCompras({
   lista,
   productos,
+  vistas,
   cuentas,
   paradas,
   setParadas,
@@ -307,6 +384,7 @@ function ListaDeCompras({
 }: {
   lista: ListaCompras | null
   productos: Producto[]
+  vistas: ReturnType<typeof vistaDeProducto>[]
   cuentas: ReturnType<typeof comparativo> | null
   paradas: number
   setParadas: (n: number) => void
@@ -364,6 +442,12 @@ function ListaDeCompras({
             const p = productos.find((x) => x.id === item.productoId)
             if (!p) return null
             const donde = cuentas?.repartido.asignacion.get(p.id)
+            // La lista suma paquetes, no litros: si allá viene en otra presentación hay que decirlo,
+            // porque el total puede ganar sencillamente porque trae menos.
+            const paquete = donde
+              ? vistas.find((v) => v.producto.id === p.id)?.precios.find((x) => x.tienda === donde)
+              : undefined
+            const otroTamano = paquete && Math.abs(paquete.contenido - p.contenidoRef) > 0.001
             return (
               <div className={`item ${item.listo ? 'pagada' : ''}`} key={p.id}>
                 <button
@@ -379,6 +463,14 @@ function ListaDeCompras({
                   </div>
                   <div className="chica suave">
                     {donde ? `más barato en ${nombreTienda(donde)}` : 'sin precio todavía'}
+                    {otroTamano && paquete && (
+                      <>
+                        {' · '}
+                        <span className="negrita">
+                          allá viene de {paquete.contenido.toLocaleString('es-CO')} {p.unidad}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="fila" style={{ gap: 6 }}>
@@ -500,7 +592,7 @@ function Ficha({
             const v = producto.vinculos.find((x) => x.tienda === t.id)
             const esMejor = vista?.mejor?.tienda === t.id
             return (
-              <div className={`item ${esMejor ? 'pagada' : ''}`} key={t.id}>
+              <div className="item" key={t.id}>
                 <div className="cuerpo">
                   <div className="titulo">
                     {nombreTienda(t.id)} {esMejor && <span className="chip oliva">la más barata</span>}
@@ -516,12 +608,12 @@ function Ficha({
                       'sin vincular'
                     )}
                   </div>
-                  <div className="fila" style={{ gap: 6, marginTop: 6 }}>
+                  <div className="fila" style={{ gap: 6, marginTop: 6, whiteSpace: 'nowrap' }}>
                     <button className="btn chico fantasma" onClick={() => setVinculando(t.id)}>
                       {v ? 'Cambiar' : 'Vincular'}
                     </button>
                     <button className="btn chico fantasma" onClick={() => setAnotando(t.id)}>
-                      Anotar a mano
+                      A mano
                     </button>
                     {v && (
                       <button className="btn chico fantasma" onClick={() => onDesvincular(producto.id, t.id)}>

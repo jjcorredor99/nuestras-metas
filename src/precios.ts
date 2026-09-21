@@ -58,6 +58,8 @@ export interface EstadoPrecios {
     sku?: string
   }) => Promise<string | null>
   buscar: (termino: string) => Promise<Candidato[]>
+  /** La foto que le tomaron al folleto en la tienda: la lee Claude y entra como precio de folleto. */
+  leerFolleto: (tienda: TiendaId, imagenes: string[]) => Promise<string | null>
 }
 
 /**
@@ -144,5 +146,22 @@ export function usePrecios(): EstadoPrecios {
     })
   }, [])
 
-  return { precios, caidas, cargando, faltaSql, recargar, anotarPrecio, buscar }
+  const leerFolleto = useCallback<EstadoPrecios['leerFolleto']>(
+    async (tienda, imagenes) => {
+      if (!supabase) return 'Sin conexión con Supabase'
+      if (imagenes.length === 0) return 'No hay fotos que leer'
+      const { data, error } = await supabase.functions.invoke('precios-folletos', {
+        body: { tienda, imagenes },
+      })
+      if (error) return error.message
+      const suya = (data as { tiendas?: { tienda: string; ok: boolean; filas: number; error?: string }[] } | null)
+        ?.tiendas?.find((t) => t.tienda === tienda)
+      if (suya && !suya.ok) return suya.error ?? 'No se pudo leer el folleto'
+      await recargar()
+      return suya && suya.filas === 0 ? 'No se reconoció ningún precio en la foto' : null
+    },
+    [recargar],
+  )
+
+  return { precios, caidas, cargando, faltaSql, recargar, anotarPrecio, buscar, leerFolleto }
 }

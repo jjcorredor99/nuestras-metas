@@ -1,7 +1,7 @@
 // La Edge Function de Supabase que Claude usa como conector.
 // No se edita supabase/functions/mcp/index.ts a mano: sale de aquí con `npm run mcp:build`.
 import type { Persona } from '../src/types'
-import type { Almacen, FilaItem, TipoFila } from './datos'
+import type { Almacen, Entrante, FilaItem, TipoFila } from './datos'
 import { hoyEn, type Contexto } from './herramientas'
 import { manejar } from './protocolo'
 
@@ -56,6 +56,22 @@ function almacen(hogar: string, usuario: string): Almacen {
         headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ borrado: true, ...marca() }),
       })
+    },
+    async entrantes() {
+      const r = await rest(
+        `entrantes?hogar_id=eq.${hogar}&procesado=eq.false&select=id,persona,texto,recibido_en&order=recibido_en&limit=200`,
+      )
+      return (await r.json()) as Entrante[]
+    },
+    async resolverEntrante(id, procesado) {
+      if (!/^[0-9a-f-]{36}$/.test(id)) return false
+      // Resolver solo si sigue pendiente: si los dos lo confirman a la vez, uno solo lo anota.
+      const r = await rest(`entrantes?hogar_id=eq.${hogar}&id=eq.${id}&procesado=eq.${!procesado}&select=id`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ procesado }),
+      })
+      return ((await r.json()) as unknown[]).length > 0
     },
   }
 }

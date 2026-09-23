@@ -40,6 +40,21 @@ export interface Almacen {
   guardar(filas: FilaItem[]): Promise<void>
   /** Marca filas como borradas (la app las quita en los dos celulares). */
   borrar(ids: string[]): Promise<void>
+  /** Los mensajes del banco que nadie ha resuelto todavía (lo "por confirmar"). */
+  entrantes(): Promise<Entrante[]>
+  /**
+   * Resuelve (o suelta) un mensaje. Al resolver, solo gana si nadie se adelantó:
+   * devuelve false si el otro celular ya lo tomó.
+   */
+  resolverEntrante(id: string, procesado: boolean): Promise<boolean>
+}
+
+/** Un SMS del banco tal como lo dejó el Atajo del celular. */
+export interface Entrante {
+  id: string
+  persona: Persona
+  texto: string
+  recibido_en: string
 }
 
 export interface Datos {

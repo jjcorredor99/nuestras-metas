@@ -42,11 +42,25 @@ function hogar(): FilaItem[] {
 
 function montar() {
   const filas = new Map(hogar().map((f) => [f.id, f]))
+  const entrantes = new Map(
+    [
+      { id: 'm1', persona: 'b' as const, texto: 'Bancolombia: Compraste $32.000 en TIENDA DON PEPE', recibido_en: '2026-09-22T15:00:00Z' },
+      { id: 'm2', persona: 'a' as const, texto: 'Bancolombia: Recibiste una transferencia por $300.000 de LAURA GOMEZ', recibido_en: '2026-09-22T16:00:00Z' },
+      { id: 'm3', persona: 'a' as const, texto: 'Bancolombia: Tu clave dinamica es 483920. No compartas este codigo.', recibido_en: '2026-09-22T17:00:00Z' },
+    ].map((m) => [m.id, { ...m, procesado: false }]),
+  )
   let n = 0
   const almacen: Almacen = {
     leer: async () => [...filas.values()],
     guardar: async (nuevas) => nuevas.forEach((f) => filas.set(f.id, structuredClone(f))),
     borrar: async (ids) => ids.forEach((id) => filas.delete(id)),
+    entrantes: async () => [...entrantes.values()].filter((m) => !m.procesado),
+    resolverEntrante: async (id, procesado) => {
+      const m = entrantes.get(id)
+      if (!m || m.procesado === procesado) return false
+      m.procesado = procesado
+      return true
+    },
   }
   const ctx: Contexto = { almacen, persona: 'a', hoy: '2026-09-23', uid: () => `nuevo-${++n}` }
   const pedir = async (method: string, params?: unknown, token = TOKEN) => {
@@ -65,7 +79,7 @@ function montar() {
     const texto = cuerpo.result.content[0].text as string
     return { error: cuerpo.result.isError === true, texto, datos: cuerpo.result.isError ? null : JSON.parse(texto) }
   }
-  return { filas, pedir, usar }
+  return { filas, entrantes, pedir, usar }
 }
 
 describe('protocolo', () => {
@@ -205,6 +219,45 @@ describe('herramientas', () => {
     const { usar, filas } = montar()
     await usar('borrar_gasto', { id: 'g2' })
     expect(filas.has('g2')).toBe(false)
+  })
+})
+
+describe('por confirmar', () => {
+  it('lista lo que llegó por SMS con lo leído y una sugerencia', async () => {
+    const { usar } = montar()
+    const { datos } = await usar('por_confirmar')
+    expect(datos.cuantos).toBe(3)
+    const [compra, ingreso, clave] = datos.mensajes
+    expect(compra).toMatchObject({ llegoA: 'Lau', sugerencia: 'gasto', lectura: { monto: 32_000, categoriaSugerida: 'Otros' } })
+    expect(ingreso.sugerencia).toMatch(/^ingreso/)
+    expect(clave.sugerencia).toBe('descartar')
+  })
+
+  it('confirmar como gasto lo anota a nombre de quien recibió el SMS y aprende la categoría', async () => {
+    const { usar, filas, entrantes } = montar()
+    const { datos } = await usar('confirmar_mensaje', { mensaje: 'm1', como: 'gasto', categoria: 'mercado', compartido: true })
+    expect(datos.gastoAnotado).toMatchObject({ monto: 32_000, pagoPor: 'Lau', categoria: 'Mercado', compartido: true, desde: 'SMS Bancolombia' })
+    expect(datos.aprendido).toMatch(/TIENDA va a Mercado/)
+    expect((filas.get('perfil')?.data as { aprendidos: Record<string, string> }).aprendidos.TIENDA).toBe('mercado')
+    expect(entrantes.get('m1')?.procesado).toBe(true)
+    // Ya no está por confirmar, y no se puede confirmar dos veces.
+    expect((await usar('por_confirmar')).datos.cuantos).toBe(2)
+    expect((await usar('confirmar_mensaje', { mensaje: 'm1', como: 'gasto' })).error).toBe(true)
+  })
+
+  it('confirmar como ingreso y descartar', async () => {
+    const { usar, entrantes } = montar()
+    const { datos } = await usar('confirmar_mensaje', { mensaje: 'm2', como: 'ingreso', fuente: 'extra' })
+    expect(datos.ingresoAnotado).toMatchObject({ monto: 300_000, de: 'Juan', fuente: 'extra' })
+    await usar('confirmar_mensaje', { mensaje: 'm3', como: 'descartar' })
+    expect(entrantes.get('m3')?.procesado).toBe(true)
+  })
+
+  it('si el mensaje no trae valor, pide el monto', async () => {
+    const { usar } = montar()
+    const r = await usar('confirmar_mensaje', { mensaje: 'm3', como: 'gasto' })
+    expect(r.error).toBe(true)
+    expect(r.texto).toMatch(/monto/)
   })
 })
 

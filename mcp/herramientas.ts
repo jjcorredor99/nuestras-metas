@@ -14,9 +14,10 @@ import {
   vistaUnSueldo,
 } from '../src/caja'
 import { CATEGORIAS, catInfo } from '../src/categorias'
-import { categoriaDe } from '../src/comercios'
+import { categoriaDe, claveComercio } from '../src/comercios'
+import { esIngreso, esLectura, huella, leerMensaje, MOTIVOS, type Lectura } from '../src/mensajes'
 import { dinero, pct, sumar } from '../src/format'
-import { datosDesdeFilas, type Almacen, type Apunte, type Datos } from './datos'
+import { datosDesdeFilas, type Almacen, type Apunte, type Datos, type FilaItem } from './datos'
 
 export interface Contexto {
   almacen: Almacen
@@ -781,6 +782,130 @@ export const HERRAMIENTAS: Herramienta[] = [
       else delete nuevo.hechoEn
       await ctx.almacen.guardar([{ id: a.id, tipo: 'apunte', data: nuevo }])
       return { apunte: nuevo }
+    },
+  },
+
+  // ---------- lo que llegó por SMS ----------
+  {
+    name: 'por_confirmar',
+    title: 'Mensajes del banco por confirmar',
+    description:
+      'Los SMS del banco que llegaron por el Atajo y nadie ha resuelto: lo que la app no se atrevió a anotar sola (comercio desconocido, plata que entró) y lo que llegó mientras la app estaba cerrada. Para cada uno trae lo que se leyó (monto, comercio, fecha, categoría sugerida) y una sugerencia. Después se resuelve con confirmar_mensaje.',
+    inputSchema: { type: 'object', properties: {} },
+    soloLectura: true,
+    correr: async (_args, ctx) => {
+      const { estado: e } = await leer(ctx)
+      const lista = await ctx.almacen.entrantes()
+      const yaAnotados = new Set([...e.gastos, ...e.ingresos].map((x) => x.origen?.hash).filter(Boolean))
+      return {
+        cuantos: lista.length,
+        mensajes: lista.map((m) => {
+          const base = { id: m.id, llegoA: nombreDe(e, m.persona), recibido: m.recibido_en, texto: m.texto }
+          const l = leerMensaje(m.texto, e.perfil.aprendidos ?? {})
+          if (!esLectura(l)) return { ...base, sugerencia: 'descartar', motivo: MOTIVOS[l.error] }
+          if (yaAnotados.has(l.hash)) return { ...base, sugerencia: 'descartar', motivo: 'Ese mensaje ya está anotado.' }
+          return {
+            ...base,
+            lectura: {
+              tipo: l.tipo,
+              monto: l.monto,
+              comercio: l.comercio,
+              fecha: l.fecha,
+              banco: l.banco,
+              ...(l.tarjeta ? { tarjeta: l.tarjeta } : {}),
+              categoriaSugerida: catInfo(l.categoria).nombre,
+              confianza: l.confianza,
+            },
+            sugerencia: esIngreso(l) ? 'ingreso, si no es un giro entre ustedes dos' : 'gasto',
+          }
+        }),
+      }
+    },
+  },
+  {
+    name: 'confirmar_mensaje',
+    title: 'Confirmar un mensaje del banco',
+    description:
+      'Resuelve un mensaje de por_confirmar: lo guarda como gasto o como ingreso (con lo leído, corrigiendo lo que digan) o lo descarta. Si corrigen la categoría, la app se acuerda de ese comercio para la próxima. Un giro entre ustedes dos no es ingreso: se descarta. Sale de "por confirmar" en los dos celulares.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mensaje: { type: 'string', description: 'El id que da por_confirmar.' },
+        como: { type: 'string', enum: ['gasto', 'ingreso', 'descartar'] },
+        monto: P.monto,
+        categoria: { type: 'string', enum: CATS, description: 'Solo gastos. Sin ella, la sugerida.' },
+        compartido: { type: 'boolean', description: 'Solo gastos. Por defecto personal, como en la app.' },
+        nota: { type: 'string', description: 'Sin ella, el comercio.' },
+        fecha: { type: 'string', description: 'AAAA-MM-DD. Sin ella, la del mensaje.' },
+        persona: { type: 'string', description: 'Quién pagó o a quién le entró. Sin ella, a quien le llegó el SMS.' },
+        fuente: { type: 'string', enum: ['nomina', 'extra', 'devolucion', 'otro'], description: 'Solo ingresos.' },
+      },
+      required: ['mensaje', 'como'],
+    },
+    soloLectura: false,
+    correr: async (args, ctx) => {
+      const { estado: e } = await leer(ctx)
+      const id = texto(args.mensaje, 'mensaje', true)
+      const como = texto(args.como, 'como', true)
+      if (!['gasto', 'ingreso', 'descartar'].includes(como)) throw new ErrorUsuario('"como" es gasto, ingreso o descartar.')
+      const m = (await ctx.almacen.entrantes()).find((x) => x.id === id)
+      if (!m) throw new ErrorUsuario('Ese mensaje ya no está por confirmar (lo resolvieron o no existe). Revisa por_confirmar.')
+
+      if (como === 'descartar') {
+        if (!(await ctx.almacen.resolverEntrante(id, true))) throw new ErrorUsuario('El otro celular ya lo resolvió.')
+        return { descartado: m.texto }
+      }
+
+      const leido = leerMensaje(m.texto, e.perfil.aprendidos ?? {})
+      const l: Lectura | null = esLectura(leido) ? leido : null
+      if (!l && args.monto === undefined) throw new ErrorUsuario('No entendí el valor del mensaje: dime el monto.')
+      const quien = args.persona === undefined ? m.persona : persona(args.persona, e, ctx, 'persona')
+      const origen = { fuente: 'sms' as const, hash: l?.hash ?? huella(m.texto), ...(l ? { banco: l.banco } : {}) }
+      const base = {
+        fecha: args.fecha === undefined ? (l?.fecha ?? m.recibido_en.slice(0, 10)) : fecha(args.fecha, ctx),
+        monto: args.monto === undefined ? l!.monto : monto(args.monto),
+      }
+      const filas: FilaItem[] = []
+      let resultado: Record<string, unknown>
+
+      if (como === 'gasto') {
+        const sugerida = l && !esIngreso(l) ? l.categoria : undefined
+        const cat = categoria(args.categoria) ?? sugerida ?? 'otros'
+        const gasto: Gasto = {
+          id: ctx.uid(),
+          ...base,
+          categoria: cat,
+          pagadoPor: quien,
+          compartido: booleano(args.compartido, 'compartido', false),
+          nota: texto(args.nota, 'nota') ?? (l?.comercio || `Mensaje ${l?.banco ?? 'del banco'}`),
+          origen,
+        }
+        filas.push({ id: gasto.id, tipo: 'gasto', data: gasto })
+        resultado = { gastoAnotado: vistaGasto(gasto, e) }
+        // Corrigieron la categoría: la app se acuerda de ese comercio, igual que cuando se corrige en Gastos.
+        if (l?.comercio && sugerida && cat !== sugerida && claveComercio(l.comercio)) {
+          const { onboarded: _o, ...perfil } = e.perfil
+          void _o
+          filas.push({ id: 'perfil', tipo: 'perfil', data: { ...perfil, aprendidos: { ...perfil.aprendidos, [claveComercio(l.comercio)]: cat } } })
+          resultado.aprendido = `La próxima vez, ${claveComercio(l.comercio)} va a ${catInfo(cat).nombre}.`
+        }
+      } else {
+        const fuente = (texto(args.fuente, 'fuente') ?? l?.fuenteIngreso ?? 'otro') as FuenteIngreso
+        if (!['nomina', 'extra', 'devolucion', 'otro'].includes(fuente)) throw new ErrorUsuario('"fuente" es nomina, extra, devolucion u otro.')
+        const ingreso: Ingreso = { id: ctx.uid(), ...base, de: quien, fuente, nota: texto(args.nota, 'nota') ?? l?.comercio ?? '', origen }
+        filas.push({ id: ingreso.id, tipo: 'ingreso', data: ingreso })
+        resultado = { ingresoAnotado: { ...ingreso, de: nombreDe(e, ingreso.de) } }
+      }
+
+      // Primero se reclama el mensaje: si los dos lo confirman a la vez, uno solo lo anota.
+      if (!(await ctx.almacen.resolverEntrante(id, true))) throw new ErrorUsuario('El otro celular ya lo resolvió.')
+      try {
+        await ctx.almacen.guardar(filas)
+      } catch (err) {
+        await ctx.almacen.resolverEntrante(id, false).catch(() => {})
+        throw err
+      }
+      return resultado
     },
   },
 ]

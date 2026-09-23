@@ -86,8 +86,13 @@ anote aparece en los dos celulares como cualquier cambio del otro.
 También lleva **apuntes**: lo que no es plata o no tiene lugar en la app (pendientes, ideas para Grecia,
 decisiones, preguntas para después). Viven en el hogar, los ven los dos desde Claude y la app los ignora.
 
+Y resuelve lo que llegó por SMS y quedó **por confirmar**: *"¿qué hay por confirmar?"* → Claude muestra
+cada mensaje con lo que leyó y ustedes le dicen *"el de Don Pepe es mercado, compartido; el giro de Lau
+descártalo"*. Si corrigen la categoría, la app se acuerda del comercio, igual que al corregir en Gastos.
+
 Herramientas: `como_vamos`, `buscar_gastos`, `ver_ingresos`, `ver_facturas`, `ver_deudas`, `ver_hitos`,
-`ver_retos`, `ver_apuntes` para preguntar; `anotar_gasto`, `anotar_ingreso`, `abonar_deuda`,
+`ver_retos`, `ver_apuntes` para preguntar; `por_confirmar` y `confirmar_mensaje` para resolver los SMS
+del banco que esperan en "por confirmar"; `anotar_gasto`, `anotar_ingreso`, `abonar_deuda`,
 `aportar_hito`, `pagar_factura`, `avanzar_reto`, `borrar_gasto`, `apuntar`, `marcar_apunte` para anotar.
 Usan la misma matemática de la Caja (`src/caja.ts`).
 

@@ -2,6 +2,10 @@
 // @ts-nocheck
 
 // src/format.ts
+var hoy = () => {
+  const d = /* @__PURE__ */ new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 function dinero(monto2, moneda = "COP") {
   try {
     return new Intl.NumberFormat("es-CO", {
@@ -418,6 +422,178 @@ function categoriaDe(comercio, aprendidos = {}) {
   return PALABRAS.find(([re]) => re.test(nombre))?.[1] ?? null;
 }
 
+// src/mensajes.ts
+var esLectura = (r) => !("error" in r);
+var esIngreso = (l) => l.tipo === "ingreso";
+var MOTIVOS = {
+  "sin-monto": "No encontré un valor en el mensaje.",
+  "no-es-gasto": "Ese mensaje no parece un gasto.",
+  "es-ingreso": "Parece plata que entró, pero no encontré el valor."
+};
+function normalizar(texto2) {
+  return texto2.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toUpperCase();
+}
+function huella(texto2) {
+  const t = normalizar(texto2);
+  let h = 2166136261;
+  for (let i = 0; i < t.length; i++) {
+    h ^= t.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return `${t.length.toString(36)}${h.toString(36)}`;
+}
+var BANCOS = [
+  [/BANCOLOMBIA/, "Bancolombia"],
+  [/NEQUI/, "Nequi"],
+  [/DAVIPLATA/, "Daviplata"],
+  [/DAVIVIENDA/, "Davivienda"],
+  [/RAPPICARD|RAPPI CARD|RAPPIPAY/, "RappiCard"],
+  [/\bCMR\b|BANCO FALABELLA/, "Falabella"],
+  [/LULO/, "Lulo Bank"],
+  [/SCOTIABANK|COLPATRIA/, "Scotiabank"],
+  [/BBVA/, "BBVA"],
+  [/BANCO DE BOGOTA/, "Banco de Bogotá"],
+  [/BANCO DE OCCIDENTE/, "Occidente"],
+  [/NUBANK|\bNU\b/, "Nu"]
+];
+var VERBOS = [
+  { tipo: "compra", re: /\bCOMPR(A|ASTE|O|AS)\b/ },
+  { tipo: "retiro", re: /\bRETIR(O|ASTE|OS)\b|\bAVANCE\b/ },
+  { tipo: "transferencia", re: /\bTRANSFER(ISTE|ENCIA)\b|\bENVIASTE\b/ },
+  { tipo: "pago", re: /\bPAG(O|ASTE|OS|UE)\b/ }
+];
+var RE_INGRESO = /\bRECIBISTE\b|\bTE CONSIGNARON\b|\bCONSIGNACION\b|\bTE ENVIO\b|\bTE TRANSFIRIO\b|\bABONO A TU\b|\bDEVOLUCION\b|\bREVERSION\b|\bTE LLEGARON\b|\bNOMINA\b/;
+var RE_NO_TX = /CLAVE DINAMICA|NO COMPARTAS|NUNCA COMPARTAS|CODIGO DE (VERIFICACION|SEGURIDAD|ACCESO)|\bOTP\b|CONTRASENA|ACTUALIZA TUS DATOS|APROVECHA|PROMOCION|FELICITACIONES|SORTEO|INTENTO DE|BLOQUE(O|AMOS)|TU CLAVE/;
+var MESES = {
+  ENE: 1,
+  FEB: 2,
+  MAR: 3,
+  ABR: 4,
+  MAY: 5,
+  JUN: 6,
+  JUL: 7,
+  AGO: 8,
+  SEP: 9,
+  SET: 9,
+  OCT: 10,
+  NOV: 11,
+  DIC: 12
+};
+function aNumero(bruto) {
+  const t = bruto.replace(/[^\d.,]/g, "").replace(/[.,]+$/, "");
+  if (!t) return 0;
+  const ultimo = Math.max(t.lastIndexOf(","), t.lastIndexOf("."));
+  if (ultimo === -1) return Number(t) || 0;
+  const decimales = t.length - ultimo - 1;
+  if (decimales === 1 || decimales === 2) {
+    const entero = t.slice(0, ultimo).replace(/[.,]/g, "");
+    return Number(`${entero || "0"}.${t.slice(ultimo + 1)}`) || 0;
+  }
+  return Number(t.replace(/[.,]/g, "")) || 0;
+}
+function importesEn(t) {
+  const out = [];
+  const conSigno = /(?:\$|COP\s?\$?|USD\s?\$?)\s?([\d][\d.,]*)/g;
+  let m;
+  while (m = conSigno.exec(t)) {
+    const valor = aNumero(m[1]);
+    if (valor > 0) out.push({ valor, desde: m.index, hasta: m.index + m[0].length });
+  }
+  if (out.length) return out;
+  const sinSigno = /\b(?:POR|DE)\s+([\d][\d.,]{2,})/g;
+  while (m = sinSigno.exec(t)) {
+    const valor = aNumero(m[1]);
+    if (valor > 0) out.push({ valor, desde: m.index, hasta: m.index + m[0].length });
+  }
+  return out;
+}
+var CORTES = /[,;:!?]|\.(?=\s|$)|\s\d{1,2}[/-]\d{1,2}|\sT\.?\s?(?:CRED|DEB)|\sTARJETA|\sDESDE|\sCUPO|\sSALDO|\sHORA\b|\sCON\s|\sPRODUCTO|\sREF\b|\sSI NO\b|\sINQUIETUDES|\sPOR\b|\sVALOR\b|\s\*\d|\sA LAS\b/;
+function comercioDe(t, desde) {
+  let resto = t.slice(desde);
+  const conector = resto.match(/^\s*(?:EN LA|EN EL|EN|A|CON|PARA)\s+/);
+  resto = conector ? resto.slice(conector[0].length) : resto.replace(/^\s+/, "");
+  const corte = resto.search(CORTES);
+  const bruto = corte >= 0 ? resto.slice(0, corte) : resto;
+  return bruto.replace(/\*+\d*/g, " ").replace(/[^A-Z0-9&.\- ]/g, " ").replace(/\s+/g, " ").trim().replace(/\s+(EL|LA|DE|DEL|Y|EN)$/, "").trim().slice(0, 40);
+}
+function remitenteDe(t, desde) {
+  let resto = t.slice(desde);
+  const conector = resto.match(/^\s*(?:POR CONCEPTO DE|POR PARTE DE|DESDE|DE)\s+/);
+  resto = conector ? resto.slice(conector[0].length) : resto.replace(/^\s+/, "");
+  const corte = resto.search(/\sA TU\b|\sEN TU\b|\sA LA\b/);
+  const acotado = corte >= 0 ? resto.slice(0, corte) : resto;
+  return comercioDe(acotado, 0);
+}
+var fuenteIngresoDe = (t) => /NOMINA|SALARIO|SUELDO|QUINCENA/.test(t) ? "nomina" : /DEVOLUCION|REVERSION|REEMBOLSO/.test(t) ? "devolucion" : "otro";
+var iso = (a, m, d) => `${a}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+var valida = (d, m, a) => d >= 1 && d <= 31 && m >= 1 && m <= 12 && a >= 2e3 && a <= 2100;
+function fechaDe(t) {
+  const anio = Number(hoy().slice(0, 4));
+  const candidatos2 = [];
+  const numerica = t.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+  if (numerica) {
+    const d = Number(numerica[1]);
+    const m = Number(numerica[2]);
+    let a = numerica[3] ? Number(numerica[3]) : anio;
+    if (a < 100) a += 2e3;
+    if (valida(d, m, a)) candidatos2.push(iso(a, m, d));
+    if (valida(m, d, a)) candidatos2.push(iso(a, d, m));
+  }
+  const conMes = t.match(/\b(\d{1,2})[ -](?:DE[ -])?([A-Z]{3})[A-Z]*\.?(?:[ -](?:DE[ -])?(\d{2,4}))?/);
+  if (conMes && MESES[conMes[2]]) {
+    const d = Number(conMes[1]);
+    const m = MESES[conMes[2]];
+    let a = conMes[3] ? Number(conMes[3]) : anio;
+    if (a < 100) a += 2e3;
+    if (valida(d, m, a)) candidatos2.unshift(iso(a, m, d));
+  }
+  const limite = hoy();
+  return candidatos2.find((f) => f <= limite) ?? limite;
+}
+function leerMensaje(texto2, aprendidos = {}) {
+  const t = normalizar(texto2);
+  if (t.length < 8) return { error: "no-es-gasto" };
+  if (RE_NO_TX.test(t)) return { error: "no-es-gasto" };
+  const verbo = VERBOS.find((v) => v.re.test(t));
+  const banco = BANCOS.find(([re]) => re.test(t))?.[1] ?? "Desconocido";
+  if (RE_INGRESO.test(t) && (!verbo || verbo.tipo === "pago" || verbo.tipo === "transferencia")) {
+    const importes2 = importesEn(t);
+    if (!importes2.length) return { error: "es-ingreso" };
+    const desde = t.search(RE_INGRESO);
+    const importe2 = importes2.find((i) => i.desde >= desde) ?? importes2[0];
+    return {
+      monto: importe2.valor,
+      comercio: remitenteDe(t, importe2.hasta),
+      fecha: fechaDe(t),
+      banco,
+      tipo: "ingreso",
+      categoria: "otros",
+      confianza: "baja",
+      hash: huella(texto2),
+      fuenteIngreso: fuenteIngresoDe(t)
+    };
+  }
+  if (!verbo) return { error: "no-es-gasto" };
+  const importes = importesEn(t);
+  if (!importes.length) return { error: "sin-monto" };
+  const desdeVerbo = t.search(verbo.re);
+  const importe = importes.find((i) => i.desde >= desdeVerbo) ?? importes[0];
+  const comercio = comercioDe(t, importe.hasta);
+  const categoria2 = categoriaDe(comercio, aprendidos);
+  const tarjeta = t.match(/\*\s?(\d{4})\b/)?.[1];
+  return {
+    monto: importe.valor,
+    comercio,
+    fecha: fechaDe(t),
+    banco,
+    tipo: verbo.tipo,
+    ...tarjeta ? { tarjeta } : {},
+    categoria: categoria2 ?? "otros",
+    confianza: banco !== "Desconocido" && comercio.length >= 3 && categoria2 !== null ? "alta" : "baja",
+    hash: huella(texto2)
+  };
+}
+
 // mcp/datos.ts
 var COLECCION = {
   gasto: "gastos",
@@ -463,19 +639,19 @@ function hoyEn(zona = "America/Bogota", ahora = /* @__PURE__ */ new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: zona, year: "numeric", month: "2-digit", day: "2-digit" }).format(ahora);
 }
 var norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-var diaUTC = (iso) => {
-  const [y, m, d] = iso.split("-").map(Number);
+var diaUTC = (iso2) => {
+  const [y, m, d] = iso2.split("-").map(Number);
   return Date.UTC(y, m - 1, d) / 864e5;
 };
 var diasEntre = (desde, hasta) => Math.round(diaUTC(hasta) - diaUTC(desde));
-function diasParaVencer(diaVence, hoy) {
-  const [y, m, d] = hoy.split("-").map(Number);
+function diasParaVencer(diaVence, hoy2) {
+  const [y, m, d] = hoy2.split("-").map(Number);
   const ultimo = (yy, mm) => new Date(Date.UTC(yy, mm, 0)).getUTCDate();
   const dia = Math.min(diaVence, ultimo(y, m));
   if (dia >= d) return dia - d;
   const [py, pm] = m === 12 ? [y + 1, 1] : [y, m + 1];
   const prox = `${py}-${String(pm).padStart(2, "0")}-${String(Math.min(diaVence, ultimo(py, pm))).padStart(2, "0")}`;
-  return diasEntre(hoy, prox);
+  return diasEntre(hoy2, prox);
 }
 var nombreDe = (e, p) => p === "ambos" ? "Los dos" : p === "hogar" ? "La casa" : (p === "a" ? e.perfil.nombreA : e.perfil.nombreB) || (p === "a" ? "Persona 1" : "Persona 2");
 function texto(v, campo, obligatorio = false) {
@@ -1135,6 +1311,122 @@ var HERRAMIENTAS = [
       await ctx.almacen.guardar([{ id: a.id, tipo: "apunte", data: nuevo }]);
       return { apunte: nuevo };
     }
+  },
+  // ---------- lo que llegó por SMS ----------
+  {
+    name: "por_confirmar",
+    title: "Mensajes del banco por confirmar",
+    description: "Los SMS del banco que llegaron por el Atajo y nadie ha resuelto: lo que la app no se atrevió a anotar sola (comercio desconocido, plata que entró) y lo que llegó mientras la app estaba cerrada. Para cada uno trae lo que se leyó (monto, comercio, fecha, categoría sugerida) y una sugerencia. Después se resuelve con confirmar_mensaje.",
+    inputSchema: { type: "object", properties: {} },
+    soloLectura: true,
+    correr: async (_args, ctx) => {
+      const { estado: e } = await leer(ctx);
+      const lista = await ctx.almacen.entrantes();
+      const yaAnotados = new Set([...e.gastos, ...e.ingresos].map((x) => x.origen?.hash).filter(Boolean));
+      return {
+        cuantos: lista.length,
+        mensajes: lista.map((m) => {
+          const base = { id: m.id, llegoA: nombreDe(e, m.persona), recibido: m.recibido_en, texto: m.texto };
+          const l = leerMensaje(m.texto, e.perfil.aprendidos ?? {});
+          if (!esLectura(l)) return { ...base, sugerencia: "descartar", motivo: MOTIVOS[l.error] };
+          if (yaAnotados.has(l.hash)) return { ...base, sugerencia: "descartar", motivo: "Ese mensaje ya está anotado." };
+          return {
+            ...base,
+            lectura: {
+              tipo: l.tipo,
+              monto: l.monto,
+              comercio: l.comercio,
+              fecha: l.fecha,
+              banco: l.banco,
+              ...l.tarjeta ? { tarjeta: l.tarjeta } : {},
+              categoriaSugerida: catInfo(l.categoria).nombre,
+              confianza: l.confianza
+            },
+            sugerencia: esIngreso(l) ? "ingreso, si no es un giro entre ustedes dos" : "gasto"
+          };
+        })
+      };
+    }
+  },
+  {
+    name: "confirmar_mensaje",
+    title: "Confirmar un mensaje del banco",
+    description: 'Resuelve un mensaje de por_confirmar: lo guarda como gasto o como ingreso (con lo leído, corrigiendo lo que digan) o lo descarta. Si corrigen la categoría, la app se acuerda de ese comercio para la próxima. Un giro entre ustedes dos no es ingreso: se descarta. Sale de "por confirmar" en los dos celulares.',
+    inputSchema: {
+      type: "object",
+      properties: {
+        mensaje: { type: "string", description: "El id que da por_confirmar." },
+        como: { type: "string", enum: ["gasto", "ingreso", "descartar"] },
+        monto: P.monto,
+        categoria: { type: "string", enum: CATS, description: "Solo gastos. Sin ella, la sugerida." },
+        compartido: { type: "boolean", description: "Solo gastos. Por defecto personal, como en la app." },
+        nota: { type: "string", description: "Sin ella, el comercio." },
+        fecha: { type: "string", description: "AAAA-MM-DD. Sin ella, la del mensaje." },
+        persona: { type: "string", description: "Quién pagó o a quién le entró. Sin ella, a quien le llegó el SMS." },
+        fuente: { type: "string", enum: ["nomina", "extra", "devolucion", "otro"], description: "Solo ingresos." }
+      },
+      required: ["mensaje", "como"]
+    },
+    soloLectura: false,
+    correr: async (args, ctx) => {
+      const { estado: e } = await leer(ctx);
+      const id = texto(args.mensaje, "mensaje", true);
+      const como = texto(args.como, "como", true);
+      if (!["gasto", "ingreso", "descartar"].includes(como)) throw new ErrorUsuario('"como" es gasto, ingreso o descartar.');
+      const m = (await ctx.almacen.entrantes()).find((x) => x.id === id);
+      if (!m) throw new ErrorUsuario("Ese mensaje ya no está por confirmar (lo resolvieron o no existe). Revisa por_confirmar.");
+      if (como === "descartar") {
+        if (!await ctx.almacen.resolverEntrante(id, true)) throw new ErrorUsuario("El otro celular ya lo resolvió.");
+        return { descartado: m.texto };
+      }
+      const leido = leerMensaje(m.texto, e.perfil.aprendidos ?? {});
+      const l = esLectura(leido) ? leido : null;
+      if (!l && args.monto === void 0) throw new ErrorUsuario("No entendí el valor del mensaje: dime el monto.");
+      const quien = args.persona === void 0 ? m.persona : persona(args.persona, e, ctx, "persona");
+      const origen = { fuente: "sms", hash: l?.hash ?? huella(m.texto), ...l ? { banco: l.banco } : {} };
+      const base = {
+        fecha: args.fecha === void 0 ? l?.fecha ?? m.recibido_en.slice(0, 10) : fecha(args.fecha, ctx),
+        monto: args.monto === void 0 ? l.monto : monto(args.monto)
+      };
+      const filas = [];
+      let resultado;
+      if (como === "gasto") {
+        const sugerida = l && !esIngreso(l) ? l.categoria : void 0;
+        const cat = categoria(args.categoria) ?? sugerida ?? "otros";
+        const gasto = {
+          id: ctx.uid(),
+          ...base,
+          categoria: cat,
+          pagadoPor: quien,
+          compartido: booleano(args.compartido, "compartido", false),
+          nota: texto(args.nota, "nota") ?? (l?.comercio || `Mensaje ${l?.banco ?? "del banco"}`),
+          origen
+        };
+        filas.push({ id: gasto.id, tipo: "gasto", data: gasto });
+        resultado = { gastoAnotado: vistaGasto(gasto, e) };
+        if (l?.comercio && sugerida && cat !== sugerida && claveComercio(l.comercio)) {
+          const { onboarded: _o, ...perfil } = e.perfil;
+          void _o;
+          filas.push({ id: "perfil", tipo: "perfil", data: { ...perfil, aprendidos: { ...perfil.aprendidos, [claveComercio(l.comercio)]: cat } } });
+          resultado.aprendido = `La próxima vez, ${claveComercio(l.comercio)} va a ${catInfo(cat).nombre}.`;
+        }
+      } else {
+        const fuente = texto(args.fuente, "fuente") ?? l?.fuenteIngreso ?? "otro";
+        if (!["nomina", "extra", "devolucion", "otro"].includes(fuente)) throw new ErrorUsuario('"fuente" es nomina, extra, devolucion u otro.');
+        const ingreso = { id: ctx.uid(), ...base, de: quien, fuente, nota: texto(args.nota, "nota") ?? l?.comercio ?? "", origen };
+        filas.push({ id: ingreso.id, tipo: "ingreso", data: ingreso });
+        resultado = { ingresoAnotado: { ...ingreso, de: nombreDe(e, ingreso.de) } };
+      }
+      if (!await ctx.almacen.resolverEntrante(id, true)) throw new ErrorUsuario("El otro celular ya lo resolvió.");
+      try {
+        await ctx.almacen.guardar(filas);
+      } catch (err) {
+        await ctx.almacen.resolverEntrante(id, false).catch(() => {
+        });
+        throw err;
+      }
+      return resultado;
+    }
   }
 ];
 
@@ -1279,6 +1571,21 @@ function almacen(hogar, usuario) {
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ borrado: true, ...marca() })
       });
+    },
+    async entrantes() {
+      const r = await rest(
+        `entrantes?hogar_id=eq.${hogar}&procesado=eq.false&select=id,persona,texto,recibido_en&order=recibido_en&limit=200`
+      );
+      return await r.json();
+    },
+    async resolverEntrante(id, procesado) {
+      if (!/^[0-9a-f-]{36}$/.test(id)) return false;
+      const r = await rest(`entrantes?hogar_id=eq.${hogar}&id=eq.${id}&procesado=eq.${!procesado}&select=id`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ procesado })
+      });
+      return (await r.json()).length > 0;
     }
   };
 }

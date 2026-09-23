@@ -37,6 +37,8 @@ const base = (): Estado => ({
   fotos: [],
   bolsillos: [],
   ingresos: [],
+  productos: [],
+  listas: [],
 })
 
 const estadoCon = (extra: Partial<Estado>): Estado => ({ ...base(), ...extra })

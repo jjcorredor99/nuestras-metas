@@ -427,7 +427,9 @@ var COLECCION = {
   meta: "metas",
   foto: "fotos",
   bolsillo: "bolsillos",
-  ingreso: "ingresos"
+  ingreso: "ingresos",
+  producto: "productos",
+  lista: "listas"
 };
 var perfilBase = { nombreA: "", nombreB: "", nombrePareja: "", moneda: "COP", onboarded: true };
 function datosDesdeFilas(filas) {
@@ -441,7 +443,9 @@ function datosDesdeFilas(filas) {
     metas: [],
     fotos: [],
     bolsillos: [],
-    ingresos: []
+    ingresos: [],
+    productos: [],
+    listas: []
   };
   const apuntes = [];
   for (const f of filas) {
@@ -1236,7 +1240,7 @@ async function manejar(req, abrir2) {
 // mcp/funcion.ts
 var URL_SB = Deno.env.get("SUPABASE_URL") ?? "";
 var LLAVE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-var TIPOS = ["perfil", "gasto", "factura", "deuda", "reto", "meta", "foto", "bolsillo", "ingreso", "apunte"];
+var TIPOS = ["perfil", "gasto", "factura", "deuda", "reto", "meta", "foto", "bolsillo", "ingreso", "producto", "lista", "apunte"];
 async function rest(ruta, init = {}) {
   const r = await fetch(`${URL_SB}/rest/v1/${ruta}`, {
     ...init,

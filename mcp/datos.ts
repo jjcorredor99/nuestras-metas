@@ -12,7 +12,19 @@ export interface Apunte {
   hechoEn?: string
 }
 
-export type TipoFila = 'perfil' | 'gasto' | 'factura' | 'deuda' | 'reto' | 'meta' | 'foto' | 'bolsillo' | 'ingreso' | 'apunte'
+export type TipoFila =
+  | 'perfil'
+  | 'gasto'
+  | 'factura'
+  | 'deuda'
+  | 'reto'
+  | 'meta'
+  | 'foto'
+  | 'bolsillo'
+  | 'ingreso'
+  | 'producto'
+  | 'lista'
+  | 'apunte'
 
 export interface FilaItem {
   id: string
@@ -44,6 +56,8 @@ const COLECCION = {
   foto: 'fotos',
   bolsillo: 'bolsillos',
   ingreso: 'ingresos',
+  producto: 'productos',
+  lista: 'listas',
 } as const
 
 const perfilBase: Perfil = { nombreA: '', nombreB: '', nombrePareja: '', moneda: 'COP', onboarded: true }
@@ -61,6 +75,8 @@ export function datosDesdeFilas(filas: FilaItem[]): Datos {
     fotos: [],
     bolsillos: [],
     ingresos: [],
+    productos: [],
+    listas: [],
   }
   const apuntes: Apunte[] = []
   for (const f of filas) {

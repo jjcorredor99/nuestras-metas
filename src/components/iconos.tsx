@@ -11,6 +11,8 @@ const TRAZOS: Record<string, string> = {
   caja: 'M3.6 8.4a2.4 2.4 0 0 1 2.4-2.4h11.3a2.4 2.4 0 0 1 2.4 2.4v9.2a2.4 2.4 0 0 1-2.4 2.4H6a2.4 2.4 0 0 1-2.4-2.4z M16.4 11.6h3.9v3.8h-3.9a1.9 1.9 0 0 1 0-3.8z M6.2 6 15 3.2l1 2.7',
   // Recibo con borde dentado.
   gastos: 'M6.4 3.6h11.2v16.8l-1.9-1.3-1.9 1.3-1.8-1.3-1.9 1.3-1.9-1.3-1.8 1.3z M9.4 8.4h5.2 M9.4 12.2h5.2',
+  // Carrito del mercado.
+  mercado: 'M3 4.4h2.4l2.4 9.8h8.9l2.1-7.1H7 M9.4 19a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8z M16.6 19a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8z',
   // Sobre cerrado.
   facturas: 'M3.6 7.6a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2z M4.4 8.2 12 13.4l7.6-5.2',
   // Cordillera: la deuda que se sube.

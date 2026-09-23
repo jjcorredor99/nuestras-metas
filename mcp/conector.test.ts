@@ -26,6 +26,8 @@ function hogar(): FilaItem[] {
       { id: 'b1', nombre: 'Mercado', emoji: '🛒', ambito: 'hogar', asignacion: 1_000_000, acumula: false, categorias: ['mercado'], saldoInicial: 0, desde: '2026-01', ajustes: [] },
     ],
     ingresos: [],
+    productos: [],
+    listas: [],
   }
   return [
     { id: 'perfil', tipo: 'perfil', data: perfil },

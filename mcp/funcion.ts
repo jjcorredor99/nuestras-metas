@@ -14,7 +14,7 @@ const URL_SB = Deno.env.get('SUPABASE_URL') ?? ''
 // La función lee con la llave de servicio (salta RLS), así que el token es la única puerta: se valida siempre.
 const LLAVE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-const TIPOS: TipoFila[] = ['perfil', 'gasto', 'factura', 'deuda', 'reto', 'meta', 'foto', 'bolsillo', 'ingreso', 'apunte']
+const TIPOS: TipoFila[] = ['perfil', 'gasto', 'factura', 'deuda', 'reto', 'meta', 'foto', 'bolsillo', 'ingreso', 'producto', 'lista', 'apunte']
 
 async function rest(ruta: string, init: RequestInit = {}): Promise<Response> {
   const r = await fetch(`${URL_SB}/rest/v1/${ruta}`, {

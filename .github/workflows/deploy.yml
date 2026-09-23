@@ -23,6 +23,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # La función del conector se genera desde mcp/: si alguien olvidó regenerarla, que falle aquí.
+      - run: npm run mcp:build && git diff --exit-code supabase/functions/mcp/index.ts
       - run: npm run build
       # Publica dist/ en la rama gh-pages. GitHub la detecta y sirve el sitio.
       - uses: peaceiris/actions-gh-pages@v4

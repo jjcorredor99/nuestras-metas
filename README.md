@@ -73,6 +73,46 @@ tabla `items` del hogar. `src/sync.tsx` compara el estado local con lo que ya es
 sube solo lo que cambió; escucha en tiempo real los cambios del otro celular y los aplica.
 Si dos personas editan lo mismo, gana el último cambio.
 
+## Preguntarle a Claude (conector MCP)
+
+Con el conector, Claude ve lo mismo que la app y puede anotar por ustedes desde el chat:
+*"¿cómo vamos este mes?"*, *"¿en qué se nos fue la plata de salidas?"*, *"anota 45 mil en el Éxito,
+compartido"*, *"abona 500 mil a la Falabella"*, *"¿cuánto hay que guardar al mes para Grecia?"*. Lo que
+anote aparece en los dos celulares como cualquier cambio del otro.
+
+También lleva **apuntes**: lo que no es plata o no tiene lugar en la app (pendientes, ideas para Grecia,
+decisiones, preguntas para después). Viven en el hogar, los ven los dos desde Claude y la app los ignora.
+
+Herramientas: `como_vamos`, `buscar_gastos`, `ver_ingresos`, `ver_facturas`, `ver_deudas`, `ver_hitos`,
+`ver_retos`, `ver_apuntes` para preguntar; `anotar_gasto`, `anotar_ingreso`, `abonar_deuda`,
+`aportar_hito`, `pagar_factura`, `avanzar_reto`, `borrar_gasto`, `apuntar`, `marcar_apunte` para anotar.
+Usan la misma matemática de la Caja (`src/caja.ts`).
+
+Configuración, una sola vez:
+
+1. Supabase → SQL Editor → New query → pega `supabase/claude.sql` → Run.
+2. Publica la función, de una de estas dos formas:
+   - **Desde el navegador**: Edge Functions → Deploy a new function → Via Editor. Nombre: `mcp`.
+     Pega el contenido completo de `supabase/functions/mcp/index.ts` → Deploy. Después, en los ajustes
+     de la función, **apaga "Verify JWT"** (Claude no manda la sesión de Supabase; la puerta es el token).
+   - **Con la terminal**: `npx supabase login`, `npx supabase link --project-ref <tu-proyecto>` y
+     `npm run mcp:deploy`.
+3. En la app: Ajustes → **Conectar con Claude** → elige quién eres → "Generar mi enlace" → copiar.
+4. En claude.ai: Configuración → Conectores → **Agregar conector personalizado** → nombre
+   `Nuestras Metas`, URL = el enlace. Sin OAuth. Queda también en la app de Claude del celular.
+   Cada uno lo agrega en su cuenta con su propio enlace (así lo que anote queda a su nombre).
+   En Claude Code: `claude mcp add --transport http nuestras-metas <enlace>`.
+
+El enlace lleva un token: quien lo tenga puede ver y anotar en su plata. Si se filtra, "Generar un
+enlace nuevo" o "Desconectar" y el viejo deja de servir.
+
+Cómo funciona: `mcp/` es un servidor MCP sin estado (JSON-RPC por HTTP, sin dependencias) que corre como
+Edge Function. Valida el token contra `tokens_claude`, lee y escribe las filas de `items` del hogar con la
+llave de servicio, y la app las recibe en tiempo real. `supabase/functions/mcp/index.ts` es un solo archivo
+generado desde `mcp/` con `npm run mcp:build` (así se puede pegar en el editor): no se edita a mano, y CI
+avisa si quedó desactualizado. Si alguien edita en la app lo mismo que Claude al mismo tiempo, gana el
+último cambio, igual que entre los dos celulares. Las pruebas están en `mcp/conector.test.ts`.
+
 ## Gastos desde los mensajes del banco
 
 Cuando llega el SMS ("Bancolombia: Compra por $45.900 en EXITO...") no hay que anotar nada a mano.
@@ -197,6 +237,8 @@ src/
   entrantes.tsx   bandeja de mensajes que mandó el Atajo del celular
   enlace.ts       mensajes que llegan por la URL (#gastos?texto=...)
   components/     ui (modal, campos, barras, confeti, toast), IngresoModal, ArmarCaja,
-                  DesdeMensaje, AtajoSms, Cuenta
+                  DesdeMensaje, AtajoSms, ConectorClaude, Cuenta
   pages/          Inicio, Caja, Gastos, Facturas, Deudas, Retos, Metas, Muro, Ajustes
+mcp/              conector de Claude: protocolo, herramientas y la Edge Function (con pruebas)
+supabase/         esquema, mensajes del banco, conector de Claude y la función generada
 ```

@@ -5,6 +5,7 @@ import { listarFotos, blobADataUrl, dataUrlABlob, guardarFoto } from '../db'
 import { Campo, InputMonto, useToast } from '../components/ui'
 import { Cuenta } from '../components/Cuenta'
 import { AtajoSms } from '../components/AtajoSms'
+import { ConectorClaude } from '../components/ConectorClaude'
 import { useSync } from '../sync'
 
 export function Ajustes() {
@@ -122,6 +123,11 @@ export function Ajustes() {
       <div className="tarjeta pila">
         <h3>Anotar desde mensajes</h3>
         <AtajoSms avisar={mostrar} />
+      </div>
+
+      <div className="tarjeta pila">
+        <h3>Conectar con Claude</h3>
+        <ConectorClaude avisar={mostrar} />
       </div>
 
       <div className="tarjeta pila">
